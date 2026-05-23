@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
-import { Activity, PhoneOff, Mic, MicOff, Sun, Moon } from 'lucide-react';
+import { Activity, PhoneOff, Mic, MicOff, Volume2, VolumeX, Sun, Moon } from 'lucide-react';
 import { setParameter } from 'agora-rtc-sdk-ng/esm';
 import {
   useRTCClient,
   useLocalMicrophoneTrack,
   useRemoteUsers,
+  useRemoteAudioTracks,
   useClientEvent,
   useJoin,
   usePublish,
@@ -94,10 +95,13 @@ export default function ConversationComponent({
 }: ConversationComponentProps) {
   const client      = useRTCClient();
   const remoteUsers = useRemoteUsers();
+  const agentUID  = process.env.NEXT_PUBLIC_AGENT_UID ?? String(DEFAULT_AGENT_UID);
+  const agentUser = remoteUsers.find((u) => u.uid.toString() === agentUID);
+  const { audioTracks: agentAudioTracks } = useRemoteAudioTracks(agentUser ? [agentUser] : []);
   const [isEnabled, setIsEnabled]               = useState(true);
+  const [isAgentMuted, setIsAgentMuted]         = useState(false);
   const [isAgentConnected, setIsAgentConnected] = useState(false);
   const [connectionState, setConnectionState]   = useState<string>('CONNECTING');
-  const agentUID = process.env.NEXT_PUBLIC_AGENT_UID ?? String(DEFAULT_AGENT_UID);
   const [joinedUID, setJoinedUID] = useState<UID>(0);
 
   const [rawTranscript, setRawTranscript] = useState<
@@ -131,6 +135,10 @@ export default function ConversationComponent({
   const transcriptEndRef     = useRef<HTMLDivElement>(null);
   const sentimentDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestTranscriptRef  = useRef<string>('');
+  const prosodyInFlightRef        = useRef(false);
+  const voiceSecurityInFlightRef  = useRef(false);
+  const voiceSecurityDoneRef      = useRef(false);
+  const nextCycleDelayRef         = useRef(0);
 
   const addConnectionIssue = useCallback((issue: ConnectionIssue) => {
     setConnectionIssues((prev) => {
@@ -367,7 +375,7 @@ export default function ConversationComponent({
     // The [jobId] route auto-fetches the result when completed, so we receive either:
     //   • { status: '<non-completed>' } → still in progress, keep polling
     //   • result payload (no status, or status === 'completed') → done
-    const pollJob = async (url: string, initialDelay = 3000): Promise<Record<string, unknown> | null> => {
+    const pollJob = async (url: string, initialDelay = 6000): Promise<Record<string, unknown> | null> => {
       let delay = initialDelay;
       for (let i = 0; i < 8; i++) {
         await new Promise((r) => setTimeout(r, delay));
@@ -392,6 +400,8 @@ export default function ConversationComponent({
     };
 
     const submitProsody = async (blob: Blob) => {
+      if (prosodyInFlightRef.current) return;
+      prosodyInFlightRef.current = true;
       setIsProsodyLoading(true);
       try {
         const form = new FormData();
@@ -399,6 +409,7 @@ export default function ConversationComponent({
         const submitRes = await fetch('/api/valsea/prosody', { method: 'POST', body: form });
         if (!submitRes.ok) {
           if (submitRes.status === 402) setIsProsodyUnavailable(true);
+          if (submitRes.status === 429) nextCycleDelayRef.current = Math.max(nextCycleDelayRef.current, 15000);
           return;
         }
         const { job_id } = await submitRes.json() as { job_id?: string };
@@ -410,14 +421,17 @@ export default function ConversationComponent({
       } catch (err) {
         console.error('[Prosody]', err);
       } finally {
+        prosodyInFlightRef.current = false;
         if (active) setIsProsodyLoading(false);
       }
     };
 
     const submitVoiceSecurity = async (blob: Blob) => {
+      if (voiceSecurityInFlightRef.current) return;
       // Stagger 3 s behind prosody to avoid simultaneous rate-limit hits
       await new Promise((r) => setTimeout(r, 3000));
       if (!active) return;
+      voiceSecurityInFlightRef.current = true;
       setIsVoiceSecurityLoading(true);
       try {
         const form = new FormData();
@@ -425,13 +439,15 @@ export default function ConversationComponent({
         const submitRes = await fetch('/api/valsea/voice-security', { method: 'POST', body: form });
         if (!submitRes.ok) {
           if (submitRes.status === 402) setIsVoiceSecurityUnavailable(true);
+          if (submitRes.status === 429) nextCycleDelayRef.current = Math.max(nextCycleDelayRef.current, 15000);
           return;
         }
         const { job_id } = await submitRes.json() as { job_id?: string };
         if (!job_id) return;
         // Start polling 3 s after prosody's initial poll to further stagger
-        const data = await pollJob(`/api/valsea/voice-security/${job_id}`, 4000);
+        const data = await pollJob(`/api/valsea/voice-security/${job_id}`, 6000);
         if (!data || !('synthetic_probability' in data)) return;
+        voiceSecurityDoneRef.current = true;
         setVoiceSecurity({
           synthetic_probability: (data.synthetic_probability as number) ?? 0,
           behavioral_risk: (data.behavioral_risk as number) ?? 0,
@@ -440,25 +456,40 @@ export default function ConversationComponent({
       } catch (err) {
         console.error('[VoiceSecurity]', err);
       } finally {
+        voiceSecurityInFlightRef.current = false;
         if (active) setIsVoiceSecurityLoading(false);
       }
     };
 
     const runCycle = () => {
       if (!active) return;
-      const chunks: Blob[] = [];
-      let rec: MediaRecorder;
-      try { rec = new MediaRecorder(stream, { mimeType }); } catch { return; }
-      currentRecorder = rec;
-      rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-      rec.onstop = () => {
-        if (!active || chunks.length === 0) { if (active) runCycle(); return; }
-        const blob = new Blob(chunks, { type: mimeType });
-        if (active) runCycle();
-        if (blob.size >= 1000) void Promise.all([submitProsody(blob), submitVoiceSecurity(blob)]);
+      const extraDelay = nextCycleDelayRef.current;
+      nextCycleDelayRef.current = 0;
+      const startRecording = () => {
+        if (!active) return;
+        const chunks: Blob[] = [];
+        let rec: MediaRecorder;
+        try { rec = new MediaRecorder(stream, { mimeType }); } catch { return; }
+        currentRecorder = rec;
+        rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        rec.onstop = () => {
+          if (!active || chunks.length === 0) { if (active) runCycle(); return; }
+          const blob = new Blob(chunks, { type: mimeType });
+          if (active) runCycle();
+          if (blob.size >= 1000) void (async () => {
+            await submitProsody(blob);
+            // voice-security is a one-time liveness check — skip once we have a result
+            if (!voiceSecurityDoneRef.current) await submitVoiceSecurity(blob);
+          })();
+        };
+        rec.start();
+        setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, 15000);
       };
-      rec.start();
-      setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, 8000);
+      if (extraDelay > 0) {
+        setTimeout(startRecording, extraDelay);
+      } else {
+        startRecording();
+      }
     };
     runCycle();
     return () => {
@@ -486,7 +517,7 @@ export default function ConversationComponent({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript }),
       })
-        .then((r) => { if (r.status === 402) { setIsSentimentUnavailable(true); return null; } return r.ok ? r.json() : null; })
+        .then((r) => { if (r.status === 402) { setIsSentimentUnavailable(true); return null; } if (r.status === 429) return null; return r.ok ? r.json() : null; })
         .then((data) => { if (data?.sentiment) setSentiment(data as SentimentData); })
         .catch((err) => console.error('[Sentiment]', err))
         .finally(() => setIsSentimentLoading(false));
@@ -548,6 +579,12 @@ export default function ConversationComponent({
     try { await localMicrophoneTrack.setEnabled(next); setIsEnabled(next); }
     catch (error) { console.error('Failed to toggle microphone:', error); }
   }, [isEnabled, localMicrophoneTrack]);
+
+  const handleAgentMuteToggle = useCallback(() => {
+    const next = !isAgentMuted;
+    agentAudioTracks.forEach((track) => track.setVolume(next ? 0 : 100));
+    setIsAgentMuted(next);
+  }, [isAgentMuted, agentAudioTracks]);
 
   const handleTokenWillExpire = useCallback(async () => {
     if (!onTokenWillExpire || !joinedUID) return;
@@ -909,6 +946,26 @@ export default function ConversationComponent({
               }
             </div>
             <span className="vs-label">{isEnabled ? 'Mute' : 'Unmute'}</span>
+          </button>
+
+          <button
+            onClick={handleAgentMuteToggle}
+            className="flex flex-col items-center gap-1.5 transition-transform duration-200 ease-vs-out hover:scale-[1.02] active:scale-[0.98]"
+            aria-label={isAgentMuted ? 'Unmute agent' : 'Mute agent'}
+          >
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 ease-vs-out border shadow-vs-sm ${
+                isAgentMuted
+                  ? 'bg-vs-ctrl-active-bg border-vs-ctrl-active-border ring-2 ring-vs-brand/25'
+                  : 'bg-vs-ctrl-bg border-vs-ctrl-border'
+              }`}
+            >
+              {isAgentMuted
+                ? <VolumeX className="w-5 h-5 text-vs-brand-text" />
+                : <Volume2 className="w-5 h-5 text-vs-ctrl-icon" />
+              }
+            </div>
+            <span className="vs-label">{isAgentMuted ? 'Unmute AI' : 'Mute AI'}</span>
           </button>
 
           <button
