@@ -12,6 +12,12 @@ import type {
   ClientStartRequest,
 } from "../types/conversation";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { OnboardingTip } from "./OnboardingTip";
+import {
+  SessionConnectingOverlay,
+  type ConnectStep,
+} from "./SessionConnectingOverlay";
+import { useDocumentLang } from "@/hooks/useDocumentLang";
 import { useTheme } from "@/hooks/useTheme";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 
@@ -65,7 +71,24 @@ export default function LandingPage() {
   const [error, setError] = useState<string | null>(null);
   const [agoraData, setAgoraData] = useState<AgoraTokenData | null>(null);
   const [rtmClient, setRtmClient] = useState<RTMClient | null>(null);
+  const [agentJoinError, setAgentJoinError] = useState(false);
+  const [connectSteps, setConnectSteps] = useState<ConnectStep[]>([
+    { id: "token", label: "Securing voice channel", status: "pending" },
+    { id: "agent", label: "Starting AI agent", status: "pending" },
+    { id: "rtm", label: "Connecting transcript stream", status: "pending" },
+  ]);
   const { isDark, toggle: toggleTheme } = useTheme();
+
+  useDocumentLang(selectedLanguage);
+
+  const setStepStatus = (
+    id: string,
+    status: ConnectStep["status"],
+  ) => {
+    setConnectSteps((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, status } : s)),
+    );
+  };
 
   useEffect(() => {
     import("agora-rtc-react").catch(() => {});
@@ -152,6 +175,12 @@ export default function LandingPage() {
   const handleStartConversation = async () => {
     setIsLoading(true);
     setError(null);
+    setAgentJoinError(false);
+    setConnectSteps([
+      { id: "token", label: "Securing voice channel", status: "active" },
+      { id: "agent", label: "Starting AI agent", status: "pending" },
+      { id: "rtm", label: "Connecting transcript stream", status: "pending" },
+    ]);
     try {
       const agoraResponse = await fetch("/api/generate-agora-token");
       const responseData = await agoraResponse.json();
@@ -160,6 +189,9 @@ export default function LandingPage() {
           `Failed to generate token: ${JSON.stringify(responseData)}`,
         );
       }
+      setStepStatus("token", "done");
+      setStepStatus("agent", "active");
+      setStepStatus("rtm", "active");
 
       const { default: AgoraRTM } = await import("agora-rtm");
       const rtm: RTMClient = new AgoraRTM.RTM(
@@ -169,12 +201,19 @@ export default function LandingPage() {
       await rtm.login({ token: responseData.token });
       await rtm.subscribe(responseData.channel);
 
+      setStepStatus("agent", "done");
+      setStepStatus("rtm", "done");
       setRtmClient(rtm);
       setAgoraData(responseData);
       setShowConversation(true);
     } catch (err) {
       setError("Failed to start conversation. Please try again.");
       console.error("Error starting conversation:", err);
+      setConnectSteps((prev) =>
+        prev.map((s) =>
+          s.status === "active" ? { ...s, status: "pending" as const } : s,
+        ),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -190,6 +229,14 @@ export default function LandingPage() {
   if (showConversation && agoraData && rtmClient) {
     return (
       <div className="relative">
+        {agentJoinError && (
+          <div
+            role="alert"
+            className="absolute top-14 left-4 right-4 z-50 mx-auto max-w-lg text-xs text-center py-2.5 px-4 rounded-xl border border-amber-500/30 text-amber-100 bg-amber-950/90 backdrop-blur-md shadow-vs-md animate-fade-up"
+          >
+            Agent connection failed — conversation may not work as expected.
+          </div>
+        )}
         <Suspense fallback={<LoadingSkeleton />}>
           <ErrorBoundary>
             <AgoraProvider>
@@ -213,147 +260,136 @@ export default function LandingPage() {
 
   // ── Pre-call landing page ────────────────────────────────────────────────────
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden p-6 bg-vs-page text-vs-fg"
-    >
-      {/* Theme toggle */}
-      <button
-        onClick={toggleTheme}
-        className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center transition-colors duration-200 bg-vs-ctrl-bg border border-vs-border-md text-vs-ctrl-icon"
-        aria-label="Toggle theme"
-      >
-        {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-      </button>
-
-      {/* Ambient glow */}
+    <div className="vs-page-shell min-h-[100dvh] flex flex-col items-center justify-center relative overflow-hidden p-6 sm:p-10 px-safe bg-vs-page text-vs-fg">
+      <SessionConnectingOverlay visible={isLoading} steps={connectSteps} />
+      <div className="vs-mesh-bg" aria-hidden="true" />
       <div
         className="absolute inset-0 pointer-events-none"
         aria-hidden="true"
         style={{ background: 'var(--vs-ambient)' }}
       />
 
-      <div className="z-10 flex flex-col items-center gap-10 w-full max-w-sm animate-fade-up">
-        {/* VALSEA brand */}
-        <div className="flex flex-col items-center gap-2">
-          <Image
-            src="/valsea-logo.png"
-            alt="valsea"
-            width={64}
-            height={64}
-            className="rounded-2xl"
-            priority
-          />
-          <span className="text-[10px] tracking-[0.22em] uppercase font-medium text-vs-fg-dim">
-            Speech Intelligence
-          </span>
-        </div>
+      <button
+        onClick={toggleTheme}
+        className="absolute top-safe right-5 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ease-vs-out bg-vs-ctrl-bg border border-vs-border-md text-vs-ctrl-icon shadow-vs-sm hover:shadow-vs-md hover:border-vs-brand/40 hover:scale-[1.02] active:scale-[0.98]"
+        aria-label="Toggle theme"
+      >
+        {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      </button>
 
-        {/* Demo configuration card */}
-        <div className="w-full flex flex-col gap-5 rounded-2xl p-4 sm:p-6 backdrop-blur-sm bg-vs-card border border-vs-border-md">
-          {/* Demo identity — Coke CX context */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center font-bold text-white text-sm select-none shrink-0">
-              C
-            </div>
-            <div>
-              <p className="text-sm font-semibold leading-tight tracking-tight">
-                Coke CX
-              </p>
-              <p className="text-[10px] text-vs-fg-muted tracking-[0.15em] uppercase leading-tight mt-0.5">
-                Valsea Voice Agent Demo
-              </p>
-            </div>
+      <div className="relative z-10 flex flex-col items-center gap-8 sm:gap-10 w-full max-w-md">
+        <div className="flex flex-col items-center gap-4 text-center animate-fade-up">
+          <div className="relative">
+            <div
+              className="absolute -inset-3 rounded-3xl opacity-60 animate-vs-glow-pulse"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(122,86,170,0.35) 0%, transparent 70%)',
+              }}
+              aria-hidden="true"
+            />
+            <Image
+              src="/valsea-logo.png"
+              alt="Valsea"
+              width={72}
+              height={72}
+              className="relative rounded-2xl shadow-vs-lg ring-1 ring-vs-border-md"
+              priority
+            />
           </div>
-
-          <div className="h-px bg-vs-divider" />
-
-          {/* Agent Language selector */}
-          <div className="flex flex-col gap-2">
-            <label
-              htmlFor="language-select"
-              className="text-[10px] text-vs-fg-muted tracking-[0.18em] uppercase font-medium"
-            >
-              Agent Language
-            </label>
-            <select
-              id="language-select"
-              value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
-              disabled={isLoading}
-              className="w-full h-10 rounded-lg border border-vs-border-md px-3 text-sm text-vs-fg bg-vs-select-bg focus:outline-none focus:ring-1 focus:ring-vs-brand disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 appearance-none"
-            >
-              {LANGUAGE_OPTIONS.map((opt) => (
-                <option
-                  key={opt.code}
-                  value={opt.code}
-                  className="bg-vs-select-option text-vs-fg"
-                >
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Language switching toggle */}
-          {/* <label className="flex items-center gap-3 cursor-pointer select-none group">
-            <div className="relative shrink-0">
-              <input
-                type="checkbox"
-                checked={allowLanguageSwitching}
-                onChange={(e) => setAllowLanguageSwitching(e.target.checked)}
-                disabled={isLoading}
-                className="sr-only"
-              />
-              <div
-                className="w-9 h-5 rounded-full transition-colors duration-200"
-                style={{
-                  backgroundColor: allowLanguageSwitching
-                    ? '#7A56AA'
-                    : 'rgba(255,255,255,0.1)',
-                }}
-              />
-              <div
-                className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200"
-                style={{
-                  transform: allowLanguageSwitching ? 'translateX(1rem)' : 'translateX(0.125rem)',
-                }}
-              />
-            </div>
-            <span className="text-sm text-white/50 group-hover:text-white/65 transition-colors duration-200 leading-snug">
-              Allow language switching during call
-            </span>
-          </label> */}
-
-          {/* Start button — approved gradient: #3B0B94 → #7A56AA */}
-          <button
-            onClick={handleStartConversation}
-            disabled={isLoading}
-            className="w-full h-11 rounded-lg text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
-            style={{ background: isLoading ? 'var(--vs-btn-loading)' : 'var(--vs-btn-gradient)' }}
-            aria-label={
-              isLoading ? "Starting conversation" : "Start conversation"
-            }
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Starting…
-              </>
-            ) : (
-              "Start Conversation"
-            )}
-          </button>
-
-          {error && (
-            <p className="text-xs text-vs-brand-text opacity-70 text-center leading-relaxed">
-              {error}
+          <div className="space-y-1.5">
+            <p className="vs-label">Speech Intelligence</p>
+            <h1 className="vs-heading text-2xl sm:text-3xl font-semibold text-vs-fg">
+              Voice Agent Demo
+            </h1>
+            <p className="text-sm text-vs-fg-muted max-w-xs leading-relaxed">
+              Real-time accent-aware conversation for Southeast Asian markets.
             </p>
-          )}
+          </div>
         </div>
 
-        {/* Locked brand sentence */}
-        <p className="text-[11px] text-vs-fg-dim text-center tracking-wide">
-          VALSEA — Built for the Way Asia Really Speaks.
+        <div className="relative w-full animate-fade-up animate-fade-up-d1">
+          <div className="vs-glass-card vs-panel-reveal relative rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col gap-6" style={{ animationDelay: '100ms' }}>
+            <div className="flex items-center gap-3.5">
+              <div className="relative shrink-0">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center font-display font-bold text-white text-base shadow-vs-sm">
+                  C
+                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-vs-card" />
+              </div>
+              <div className="min-w-0">
+                <p className="vs-heading text-base font-semibold leading-tight">
+                  Coke CX
+                </p>
+                <p className="vs-label mt-1">
+                  Customer experience pilot
+                </p>
+              </div>
+            </div>
+
+            <div className="h-px bg-gradient-to-r from-transparent via-vs-divider to-transparent" />
+
+            <OnboardingTip message="Tap Start, allow your microphone, then speak naturally. Real-time analysis appears as you talk." />
+
+            <div className="flex flex-col gap-2.5">
+              <label htmlFor="language-select" className="vs-label">
+                Agent language
+              </label>
+              <select
+                id="language-select"
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                disabled={isLoading}
+                className="vs-select w-full h-11 rounded-xl border border-vs-border-md px-3.5 text-sm font-medium text-vs-fg bg-vs-select-bg focus:outline-none focus:ring-2 focus:ring-vs-brand/30 focus:border-vs-brand disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ease-vs-out"
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <option
+                    key={opt.code}
+                    value={opt.code}
+                    className="bg-vs-select-option text-vs-fg"
+                  >
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={handleStartConversation}
+              disabled={isLoading}
+              className="vs-btn-primary w-full h-12 rounded-xl text-white text-sm font-semibold font-display tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5"
+              style={
+                isLoading
+                  ? { background: 'var(--vs-btn-loading)', boxShadow: 'none' }
+                  : undefined
+              }
+              aria-label={
+                isLoading ? 'Starting conversation' : 'Start conversation'
+              }
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Connecting session…
+                </>
+              ) : (
+                'Start conversation'
+              )}
+            </button>
+
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-red-500 dark:text-red-400 text-center leading-relaxed animate-fade-up"
+              >
+                {error}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <p className="text-xs text-vs-fg-dim text-center tracking-wide animate-fade-up animate-fade-up-d2 max-w-sm leading-relaxed">
+          VALSEA — built for the way Asia really speaks.
         </p>
       </div>
     </div>

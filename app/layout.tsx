@@ -1,26 +1,46 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Be_Vietnam_Pro, Outfit } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({
+const outfit = Outfit({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-display',
+  weight: ['500', '600', '700'],
+  display: 'swap',
+});
+
+const beVietnamPro = Be_Vietnam_Pro({
   subsets: ['latin', 'vietnamese'],
-  variable: '--font-sans',
-  weight: ['400', '600', '700', '800'],
+  variable: '--font-body',
+  weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 };
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: 'Coke CX Voice Demo — VALSEA',
   description:
     'Coke customer support voice agent demo. Accent-aware ASR across seven Southeast Asian languages — powered by VALSEA speech intelligence.',
   icons: {
     icon: '/valsea-logo.png',
+    apple: '/valsea-logo.png',
+  },
+  openGraph: {
+    title: 'Coke CX Voice Demo — VALSEA',
+    description:
+      'Real-time voice agent with accent-aware speech intelligence for Southeast Asia.',
+    images: [{ url: '/valsea-logo.png', width: 512, height: 512, alt: 'VALSEA' }],
   },
 };
 
@@ -30,7 +50,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" className={`${outfit.variable} ${beVietnamPro.variable}`} suppressHydrationWarning>
       <head>
         {/* Set .dark before first paint to prevent flash */}
         <script
