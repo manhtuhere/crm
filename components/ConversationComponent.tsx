@@ -591,7 +591,7 @@ export default function ConversationComponent({
         <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>
       ))}
 
-      <header className="relative z-20 flex items-center justify-between px-4 md:px-6 py-3 pt-safe shrink-0 border-b border-vs-border-hdr bg-vs-card/60 backdrop-blur-xl">
+      <header className="relative z-20 flex items-center justify-between px-4 md:px-6 py-3 pt-safe shrink-0 border-b border-vs-border-hdr bg-vs-card/60 backdrop-blur-xl overflow-visible">
         <div className="flex items-center gap-3 min-w-0">
           <Image
             src="/valsea-logo.png"

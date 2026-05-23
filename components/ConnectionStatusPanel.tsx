@@ -1,4 +1,8 @@
-import React from 'react';
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import { ConversationErrorCard, type ConnectionIssue } from './ConversationErrorCard';
 
 type ConnectionStatusPanelProps = {
@@ -46,6 +50,48 @@ function getStatusLabel(
   return 'Live';
 }
 
+function PanelBody({
+  connectionState,
+  connectionIssues,
+  onClose,
+}: {
+  connectionState: string;
+  connectionIssues: ConnectionIssue[];
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <p className="vs-label">Connection</p>
+          <p className="text-xs text-vs-fg-dim mt-0.5 tabular-nums">
+            RTC {connectionState.toLowerCase()}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="vs-touch flex h-8 w-8 items-center justify-center rounded-lg border border-vs-border-md bg-vs-surface text-vs-fg-muted hover:text-vs-fg transition-colors"
+          aria-label="Close connection details"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      {connectionIssues.length === 0 ? (
+        <p className="text-sm text-vs-fg-muted leading-relaxed">
+          No agent or signaling errors reported.
+        </p>
+      ) : (
+        <div className="space-y-2 max-h-[min(50vh,16rem)] overflow-auto vs-scroll-thin pr-1">
+          {connectionIssues.map((issue) => (
+            <ConversationErrorCard key={issue.id} issue={issue} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ConnectionStatusPanel({
   connectionState,
   connectionSeverity,
@@ -53,16 +99,71 @@ export function ConnectionStatusPanel({
   isOpen,
   onToggle,
 }: ConnectionStatusPanelProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
   const dot = SEVERITY_DOT[connectionSeverity];
   const ping =
     connectionState !== 'DISCONNECTED' && connectionState !== 'DISCONNECTING';
   const label = getStatusLabel(connectionState, connectionSeverity, connectionIssues.length);
 
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onToggle();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen, onToggle]);
+
+  const overlay =
+    mounted && isOpen
+      ? createPortal(
+          <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 pt-[max(5rem,env(safe-area-inset-top)+4rem)] sm:items-start sm:justify-end sm:pt-[max(4.5rem,env(safe-area-inset-top)+3.5rem)] sm:pr-4 sm:pl-4">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+              aria-label="Close connection details"
+              onClick={onToggle}
+            />
+            <div
+              id="connection-details-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="connection-details-title"
+              className="relative z-[81] w-full max-w-sm rounded-2xl border border-vs-border-md bg-vs-page p-4 shadow-vs-lg animate-fade-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span id="connection-details-title" className="sr-only">
+                Connection details
+              </span>
+              <PanelBody
+                connectionState={connectionState}
+                connectionIssues={connectionIssues}
+                onClose={onToggle}
+              />
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div className="relative flex-shrink-0">
+    <div ref={rootRef} className="relative flex-shrink-0">
       <button
         type="button"
-        className="vs-touch flex items-center gap-1.5 min-h-9 px-2.5 sm:px-3 py-1.5 rounded-full vs-label border bg-vs-brand-acc/80 border-vs-border-md text-vs-brand-text shadow-vs-sm hover:border-vs-brand/50 transition-colors"
+        className={`vs-touch flex items-center gap-1.5 min-h-9 px-2.5 sm:px-3 py-1.5 rounded-full vs-label border shadow-vs-sm transition-colors ${
+          isOpen
+            ? 'bg-vs-brand-acc border-vs-brand text-vs-brand-text'
+            : 'bg-vs-brand-acc/80 border-vs-border-md text-vs-brand-text hover:border-vs-brand/50'
+        }`}
         aria-label={getConnectionLabel(connectionState, connectionSeverity)}
         aria-expanded={isOpen}
         aria-controls="connection-details-panel"
@@ -78,34 +179,7 @@ export function ConnectionStatusPanel({
         </span>
         {label}
       </button>
-
-      <div
-        id="connection-details-panel"
-        className={`fixed top-[4.5rem] left-1/2 z-30 w-[min(92vw,22rem)] -translate-x-1/2 rounded-xl border border-vs-border-md bg-vs-card/95 p-3 space-y-2 backdrop-blur-xl shadow-vs-lg transition-all duration-200 ease-vs-out md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:translate-x-0 ${
-          isOpen
-            ? 'opacity-100 pointer-events-auto scale-100'
-            : 'opacity-0 pointer-events-none scale-95'
-        }`}
-        role="status"
-        aria-live="polite"
-        aria-label="Connection details"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="vs-label text-[10px]">Connection</div>
-          <div className="text-[11px] text-vs-fg-dim tabular-nums">
-            RTC {connectionState.toLowerCase()}
-          </div>
-        </div>
-        {connectionIssues.length === 0 ? (
-          <div className="text-xs text-vs-fg-muted">No agent or signaling errors.</div>
-        ) : (
-          <div className="space-y-2 max-h-56 overflow-auto vs-scroll-thin pr-1">
-            {connectionIssues.map((issue) => (
-              <ConversationErrorCard key={issue.id} issue={issue} />
-            ))}
-          </div>
-        )}
-      </div>
+      {overlay}
     </div>
   );
 }
