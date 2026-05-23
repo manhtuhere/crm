@@ -193,18 +193,36 @@ export default function LandingPage() {
       setStepStatus("agent", "active");
       setStepStatus("rtm", "active");
 
-      const { default: AgoraRTM } = await import("agora-rtm");
-      const rtm: RTMClient = new AgoraRTM.RTM(
-        process.env.NEXT_PUBLIC_AGORA_APP_ID!,
-        String(Date.now()),
-      );
-      await rtm.login({ token: responseData.token });
-      await rtm.subscribe(responseData.channel);
+      const [agentData, rtm] = await Promise.all([
+        fetch("/api/invite-agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requester_id: responseData.uid,
+            channel_name: responseData.channel,
+            languageCode: selectedLanguage,
+            allowLanguageSwitching,
+          } as ClientStartRequest),
+        }).then(async (res) => {
+          if (!res.ok) throw new Error(`Failed to start agent: ${await res.text()}`);
+          return res.json() as Promise<AgentResponse>;
+        }),
+        (async () => {
+          const { default: AgoraRTM } = await import("agora-rtm");
+          const client: RTMClient = new AgoraRTM.RTM(
+            process.env.NEXT_PUBLIC_AGORA_APP_ID!,
+            String(Date.now()),
+          );
+          await client.login({ token: responseData.token });
+          await client.subscribe(responseData.channel);
+          return client;
+        })(),
+      ]);
 
       setStepStatus("agent", "done");
       setStepStatus("rtm", "done");
       setRtmClient(rtm);
-      setAgoraData(responseData);
+      setAgoraData({ ...responseData, agentId: agentData.agent_id });
       setShowConversation(true);
     } catch (err) {
       setError("Failed to start conversation. Please try again.");

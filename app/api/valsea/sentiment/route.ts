@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkSubmitCooldown } from '@/lib/valsea-rate-limit';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -7,6 +8,9 @@ function requireEnv(name: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  if (!checkSubmitCooldown('sentiment')) {
+    return NextResponse.json({ error: 'Rate limit — try again shortly' }, { status: 429 });
+  }
   try {
     const { transcript } = await request.json();
     if (!transcript) {
