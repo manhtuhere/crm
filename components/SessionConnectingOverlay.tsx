@@ -12,7 +12,6 @@ type SessionConnectingOverlayProps = {
   /** When true, plays 3 → 2 → 1 → Call connected, then calls onFinished */
   signalReady?: boolean;
   onFinished?: () => void;
-  agentName?: string;
 };
 
 const COUNTDOWN_MS = 720;
@@ -23,7 +22,6 @@ export function SessionConnectingOverlay({
   visible,
   signalReady = false,
   onFinished,
-  agentName = 'Valsea',
 }: SessionConnectingOverlayProps) {
   const reduced = usePrefersReducedMotion();
   const [phase, setPhase] = useState<CallPhase>('idle');
@@ -91,7 +89,7 @@ export function SessionConnectingOverlay({
 
   const statusLabel =
     phase === 'ringing'
-      ? `Calling ${agentName}…`
+      ? 'Placing your call…'
       : phase === 'countdown'
         ? 'Connecting'
         : 'Call connected';
@@ -167,10 +165,10 @@ export function SessionConnectingOverlay({
             )}
             <span>
               {phase === 'ringing'
-                ? 'Support line · please wait'
+                ? 'Contact center queue · please wait'
                 : phase === 'countdown'
                   ? 'Establishing secure voice link'
-                  : `You're live with ${agentName}`}
+                  : 'Agent on the line'}
             </span>
           </p>
         </div>

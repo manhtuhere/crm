@@ -29,17 +29,17 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: 'Coke CX Voice Demo — VALSEA',
+  title: 'BPO Voice Call Demo — VALSEA',
   description:
-    'Coke customer support voice agent demo. Accent-aware ASR across seven Southeast Asian languages — powered by VALSEA speech intelligence.',
+    'Contact-center voice call demo for BPO operations (Concentrix, TDCX, and similar). Live translation-ready agent with accent-aware ASR across Southeast Asian languages.',
   icons: {
     icon: '/valsea-logo.png',
     apple: '/valsea-logo.png',
   },
   openGraph: {
-    title: 'Coke CX Voice Demo — VALSEA',
+    title: 'BPO Voice Call Demo — VALSEA',
     description:
-      'Real-time voice agent with accent-aware speech intelligence for Southeast Asia.',
+      'Multilingual inbound voice support for offshore contact centers — powered by VALSEA speech intelligence.',
     images: [{ url: '/valsea-logo.png', width: 512, height: 512, alt: 'VALSEA' }],
   },
 };

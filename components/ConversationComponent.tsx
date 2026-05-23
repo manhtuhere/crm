@@ -626,9 +626,9 @@ export default function ConversationComponent({
             priority
           />
           <div className="min-w-0">
-            <p className="vs-heading text-sm font-semibold leading-none">Coke CX</p>
+            <p className="vs-heading text-sm font-semibold leading-none">Voice call</p>
             <p className="vs-caption mt-1 truncate lg:hidden">{centerStateText}</p>
-            <p className="vs-caption mt-1 truncate hidden lg:block">Voice agent session</p>
+            <p className="vs-caption mt-1 truncate hidden lg:block">Contact center session</p>
           </div>
         </div>
 

@@ -295,12 +295,14 @@ export default function LandingPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <p className="vs-label">Speech Intelligence</p>
+            <p className="vs-label">Contact center · Voice</p>
             <h1 className="vs-heading text-2xl sm:text-3xl font-semibold text-vs-fg">
-              Voice Agent Demo
+              BPO Voice Call Demo
             </h1>
-            <p className="text-sm text-vs-fg-muted max-w-xs leading-relaxed">
-              Real-time accent-aware conversation for Southeast Asian markets.
+            <p className="text-sm text-vs-fg-muted max-w-sm leading-relaxed">
+              Built for offshore contact centers — Concentrix, TDCX, and similar
+              operations. Live voice with accent-aware ASR and queue-language
+              translation.
             </p>
           </div>
         </div>
@@ -309,29 +311,37 @@ export default function LandingPage() {
           <div className="vs-glass-card vs-panel-reveal relative rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col gap-6" style={{ animationDelay: '100ms' }}>
             <div className="flex items-center gap-3.5">
               <div className="relative shrink-0">
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center font-display font-bold text-white text-base shadow-vs-sm">
-                  C
-                </div>
+                <Image
+                  src="/valsea-logo.png"
+                  alt=""
+                  width={44}
+                  height={44}
+                  className="rounded-xl ring-1 ring-vs-border-md shadow-vs-sm"
+                />
                 <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-vs-card" />
               </div>
               <div className="min-w-0">
                 <p className="vs-heading text-base font-semibold leading-tight">
-                  Coke CX
+                  Voice call assistant
                 </p>
                 <p className="vs-label mt-1">
-                  Customer experience pilot
+                  Inbound support · translation-ready
                 </p>
               </div>
             </div>
 
             <div className="h-px bg-gradient-to-r from-transparent via-vs-divider to-transparent" />
 
-            <OnboardingTip message="Tap Start, allow your microphone, then speak naturally. Real-time analysis appears as you talk." />
+            <OnboardingTip message="Start a voice call, allow your microphone, and speak in any supported language. The agent replies in your selected queue language — ideal for multilingual BPO floors." />
 
             <div className="flex flex-col gap-2.5">
               <label htmlFor="language-select" className="vs-label">
-                Agent language
+                Call language &amp; translation
               </label>
+              <p className="text-xs text-vs-fg-dim -mt-1 leading-relaxed">
+                Agent responses and greetings match this queue language (EN, VI,
+                ID, TH, and more).
+              </p>
               <select
                 id="language-select"
                 value={selectedLanguage}
@@ -361,16 +371,16 @@ export default function LandingPage() {
                   : undefined
               }
               aria-label={
-                isLoading ? 'Starting conversation' : 'Start conversation'
+                isLoading ? 'Starting voice call' : 'Start voice call'
               }
             >
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Connecting session…
+                  Connecting call…
                 </>
               ) : (
-                'Start conversation'
+                'Start voice call'
               )}
             </button>
 
@@ -386,7 +396,8 @@ export default function LandingPage() {
         </div>
 
         <p className="text-xs text-vs-fg-dim text-center tracking-wide animate-fade-up animate-fade-up-d2 max-w-sm leading-relaxed">
-          VALSEA — built for the way Asia really speaks.
+          VALSEA — speech intelligence for multilingual contact-center voice
+          queues.
         </p>
       </div>
     </div>

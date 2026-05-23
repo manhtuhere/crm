@@ -16,7 +16,7 @@ Schema:
 {
   "intent": string,          // snake_case intent label, e.g. "place_order", "complaint", "pricing_inquiry", "track_shipment"
   "confidence": number,      // 0.0–1.0
-  "entities": [{ "type": string, "value": string }],  // extracted entities, e.g. { "type": "product", "value": "Coca-Cola 1.5L" }
+  "entities": [{ "type": string, "value": string }],  // extracted entities, e.g. { "type": "account_id", "value": "ACC-10482" }
   "action_suggestion": string  // one-line recommended next action for the agent/CRM
 }`;
 
