@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
-import { Loader2, Activity, Clock, PhoneOff, Mic, MicOff } from 'lucide-react';
+import { Loader2, Activity, Clock, PhoneOff, Mic, MicOff, Sun, Moon } from 'lucide-react';
 import { setParameter } from 'agora-rtc-sdk-ng/esm';
 import {
   useRTCClient,
@@ -32,6 +32,7 @@ import {
   normalizeTranscript,
 } from '@/lib/conversation';
 import { MicrophoneSelector } from './MicrophoneSelector';
+import { useTheme } from '@/hooks/useTheme';
 import {
   ConversationErrorCard,
   getConversationIssueSeverity,
@@ -111,6 +112,7 @@ export default function ConversationComponent({
   const [isVoiceSecurityUnavailable, setIsVoiceSecurityUnavailable] = useState(false);
   const [isIntentUnavailable, setIsIntentUnavailable]     = useState(false);
   const [mobileTab, setMobileTab] = useState<'transcript' | 'analysis'>('transcript');
+  const { isDark, toggle: toggleTheme } = useTheme();
   const prevUserMsgCountRef = useRef(0);
   const prevIntentMsgCountRef = useRef(0);
 
@@ -488,17 +490,14 @@ export default function ConversationComponent({
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: '#09061c', color: '#fff' }}>
+    <div className="h-screen flex flex-col overflow-hidden bg-vs-page text-vs-fg">
       {/* Hidden remote users — keeps agent audio subscription alive */}
       {remoteUsers.map((user) => (
         <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>
       ))}
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header
-        className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3 shrink-0"
-        style={{ borderBottom: '1px solid rgba(122,86,170,0.2)' }}
-      >
+      <header className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3 shrink-0 border-b border-vs-border-hdr">
         <div className="flex items-center gap-2">
           <Image
             src="/valsea-logo.png"
@@ -511,21 +510,21 @@ export default function ConversationComponent({
           <span className="text-sm font-semibold tracking-tight">Voice Agent</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide"
-            style={{
-              border: '1px solid rgba(122,86,170,0.35)',
-              backgroundColor: 'rgba(122,86,170,0.1)',
-              color: '#B89AE3',
-            }}
-          >
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide border bg-vs-brand-acc border-vs-border-md text-vs-brand-text">
             <span
               className="w-2 h-2 rounded-full bg-green-400"
               style={{ animation: 'pulse 2s ease-in-out infinite' }}
             />
             LIVE SESSION
           </div>
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200 border bg-vs-ctrl-bg border-vs-ctrl-border text-vs-ctrl-icon"
+            aria-label="Toggle theme"
+          >
+            {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
         </div>
       </header>
 
@@ -534,8 +533,7 @@ export default function ConversationComponent({
 
         {/* Left: Analysis panels — tab-controlled on mobile, always visible on desktop */}
         <div
-          className={`order-3 md:order-1 ${mobileTab === 'analysis' ? 'flex' : 'hidden'} md:flex flex-col flex-1 md:flex-none md:w-[450px] shrink-0 overflow-y-auto overflow-hidden`}
-          style={{ borderRight: '1px solid rgba(122,86,170,0.15)' }}
+          className={`order-3 md:order-1 ${mobileTab === 'analysis' ? 'flex' : 'hidden'} md:flex flex-col flex-1 md:flex-none md:w-[450px] shrink-0 overflow-y-auto overflow-hidden border-r border-vs-border`}
         >
           <div className="p-4 flex flex-col gap-3 flex-1">
             <AnalysisPanel
@@ -562,10 +560,7 @@ export default function ConversationComponent({
           {/* Ambient purple glow */}
           <div
             className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                'radial-gradient(circle, transparent 35%, rgba(9,6,28,0.75) 58%, #09061c 75%)',
-            }}
+            style={{ background: 'var(--vs-vignette)' }}
           />
 
           {/* Robot image with edge vignette */}
@@ -574,16 +569,14 @@ export default function ConversationComponent({
               src="/valsea-robot2.png"
               alt="Valsea AI mascot"
               fill
-              style={{ objectFit: 'contain', mixBlendMode: 'screen' }}
+              className="vs-robot-blend"
+              style={{ objectFit: 'contain' }}
               priority
             />
-            {/* Radial fade to blend robot edges into dark background */}
+            {/* Radial fade to blend robot edges into background */}
             <div
               className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  'radial-gradient(circle, transparent 42%, rgba(9,6,28,0.65) 65%, #09061c 80%)',
-              }}
+              style={{ background: 'var(--vs-robot-vignette)' }}
             />
           </div>
 
@@ -595,7 +588,7 @@ export default function ConversationComponent({
                 className="w-1.5 rounded-full"
                 style={{
                   height: `${bar.h}px`,
-                  backgroundColor: '#7A56AA',
+                  backgroundColor: 'var(--vs-brand)',
                   transformOrigin: 'bottom',
                   animation: agentState
                     ? `audioBar ${bar.dur}ms ease-in-out ${bar.d}ms infinite`
@@ -611,7 +604,7 @@ export default function ConversationComponent({
           {/* Status text */}
           <div className="z-10 text-center">
             <p className="text-base md:text-xl font-semibold tracking-tight">{centerStateText}</p>
-            <p className="text-xs md:text-sm mt-1 md:mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <p className="text-xs md:text-sm mt-1 md:mt-1.5 text-vs-fg-dim">
               Processing real-time audio with low latency
             </p>
           </div>
@@ -619,18 +612,17 @@ export default function ConversationComponent({
 
         {/* Mobile tab bar — hidden on desktop */}
         <div
-          className="order-2 md:hidden flex shrink-0"
-          style={{ borderBottom: '1px solid rgba(122,86,170,0.2)' }}
+          className="order-2 md:hidden flex shrink-0 border-b border-vs-border-hdr"
         >
           {(['transcript', 'analysis'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setMobileTab(tab)}
-              className="flex-1 py-2.5 text-xs font-semibold tracking-[0.15em] uppercase transition-colors duration-200"
-              style={{
-                color: mobileTab === tab ? '#B89AE3' : 'rgba(255,255,255,0.35)',
-                borderBottom: mobileTab === tab ? '2px solid #7A56AA' : '2px solid transparent',
-              }}
+              className={`flex-1 py-2.5 text-xs font-semibold tracking-[0.15em] uppercase transition-colors duration-200 border-b-2 ${
+                mobileTab === tab
+                  ? 'text-vs-brand-text border-vs-brand'
+                  : 'text-vs-fg-dim border-transparent'
+              }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
@@ -640,17 +632,11 @@ export default function ConversationComponent({
         {/* Right: Transcript */}
         <div className={`order-4 md:order-3 ${mobileTab === 'transcript' ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none md:w-[450px] flex-col shrink-0 overflow-hidden conversation-right-panel`}>
           {/* Transcript header */}
-          <div
-            className="flex items-center justify-between px-4 py-3 shrink-0"
-            style={{ borderBottom: '1px solid rgba(122,86,170,0.15)' }}
-          >
-            <span
-              className="text-[11px] font-semibold tracking-[0.2em] uppercase"
-              style={{ color: 'rgba(255,255,255,0.5)' }}
-            >
+          <div className="flex items-center justify-between px-4 py-3 shrink-0 border-b border-vs-border">
+            <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-vs-fg-muted">
               Transcript
             </span>
-            <Clock className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.22)' }} />
+            <Clock className="w-3.5 h-3.5 text-vs-fg-dim" />
           </div>
 
           {/* Messages */}
@@ -660,7 +646,7 @@ export default function ConversationComponent({
 
               {messageList.length === 0 && !currentInProgressMessage && (
                 <div className="flex items-center justify-center py-12">
-                  <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.18)' }}>
+                  <p className="text-xs text-center text-vs-fg-dim">
                     Waiting for the conversation to begin…
                   </p>
                 </div>
@@ -679,37 +665,24 @@ export default function ConversationComponent({
                     <div className={`flex items-center gap-2 ${isAgent ? '' : 'flex-row-reverse'}`}>
                       {isAgent ? (
                         <span
-                          className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded"
-                          style={{ backgroundColor: '#7A56AA', color: '#fff' }}
+                          className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-vs-brand text-white"
                         >
                           VALSEA
                         </span>
                       ) : (
-                        <span
-                          className="text-[10px] font-medium tracking-wider"
-                          style={{ color: 'rgba(255,255,255,0.35)' }}
-                        >
+                        <span className="text-[10px] font-medium tracking-wider text-vs-fg-muted">
                           USER
                         </span>
                       )}
-                      <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.22)' }}>
+                      <span className="text-[10px] text-vs-fg-dim">
                         {timeStr}
                       </span>
                     </div>
                     <div
-                      className="max-w-[90%] px-3 py-2.5 text-sm leading-relaxed"
-                      style={isAgent ? {
-                        backgroundColor: 'rgba(59,11,148,0.2)',
-                        border: '1px solid rgba(122,86,170,0.22)',
-                        borderRadius: '0.75rem',
-                        borderTopLeftRadius: '0.2rem',
-                        color: 'rgba(255,255,255,0.85)',
-                      } : {
-                        backgroundColor: '#7A56AA',
-                        borderRadius: '0.75rem',
-                        borderTopRightRadius: '0.2rem',
-                        color: '#fff',
-                      }}
+                      className={`max-w-[90%] px-3 py-2.5 text-sm leading-relaxed ${isAgent
+                        ? 'bg-vs-msg-agent-bg border border-vs-msg-agent-border text-vs-msg-agent-text rounded-[0.75rem] rounded-tl-[0.2rem]'
+                        : 'bg-vs-brand text-white rounded-[0.75rem] rounded-tr-[0.2rem]'
+                      }`}
                     >
                       {msg.text}
                     </div>
@@ -720,26 +693,19 @@ export default function ConversationComponent({
               {currentInProgressMessage && (
                 <div className="flex flex-col items-start gap-1.5">
                   <span
-                    className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded"
-                    style={{ backgroundColor: '#7A56AA', color: '#fff' }}
+                    className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-vs-brand text-white"
                   >
                     VALSEA AI
                   </span>
                   <div
-                    className="px-3 py-2.5"
-                    style={{
-                      backgroundColor: 'rgba(59,11,148,0.2)',
-                      border: '1px solid rgba(122,86,170,0.22)',
-                      borderRadius: '0.75rem',
-                      borderTopLeftRadius: '0.2rem',
-                    }}
+                    className="px-3 py-2.5 bg-vs-msg-agent-bg border border-vs-msg-agent-border rounded-[0.75rem] rounded-tl-[0.2rem]"
                   >
                     <div className="flex gap-1.5 items-center h-2">
                       {[0, 150, 300].map((delay) => (
                         <span
                           key={delay}
-                          className="w-1.5 h-1.5 rounded-full animate-bounce"
-                          style={{ backgroundColor: '#B89AE3', animationDelay: `${delay}ms` }}
+                          className="w-1.5 h-1.5 rounded-full animate-bounce bg-vs-brand-text"
+                          style={{ animationDelay: `${delay}ms` }}
                         />
                       ))}
                     </div>
@@ -753,23 +719,14 @@ export default function ConversationComponent({
 
           {/* Connection error cards */}
           {connectionIssues.length > 0 && (
-            <div
-              className="p-3 flex flex-col gap-2 shrink-0"
-              style={{ borderTop: '1px solid rgba(122,86,170,0.12)' }}
-            >
+            <div className="p-3 flex flex-col gap-2 shrink-0 border-t border-vs-border">
               <div className="flex items-center justify-between">
-                <span
-                  className="text-[9px] tracking-[0.18em] uppercase font-medium"
-                  style={{ color: 'rgba(255,255,255,0.28)' }}
-                >
+                <span className="text-[9px] tracking-[0.18em] uppercase font-medium text-vs-fg-dim">
                   Agent Errors
                 </span>
                 <button
                   onClick={clearConnectionIssues}
-                  className="text-[9px] transition-colors duration-200"
-                  style={{ color: 'rgba(255,255,255,0.28)' }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.55)'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.28)'; }}
+                  className="text-[9px] transition-colors duration-200 text-vs-fg-dim hover:text-vs-fg-muted"
                 >
                   Clear
                 </button>
@@ -783,18 +740,9 @@ export default function ConversationComponent({
           )}
 
           {/* Real-time enrichment footer */}
-          <div
-            className="px-4 py-2.5 shrink-0 flex items-center gap-2"
-            style={{
-              borderTop: '1px solid rgba(122,86,170,0.15)',
-              backgroundColor: 'rgba(122,86,170,0.06)',
-            }}
-          >
-            <span style={{ color: '#7A56AA', fontSize: 12 }}>✦</span>
-            <span
-              className="text-[10px] tracking-[0.15em] uppercase font-medium"
-              style={{ color: 'rgba(184,154,227,0.65)' }}
-            >
+          <div className="px-4 py-2.5 shrink-0 flex items-center gap-2 border-t border-vs-border bg-vs-overlay">
+            <span className="text-vs-brand" style={{ fontSize: 12 }}>✦</span>
+            <span className="text-[10px] tracking-[0.15em] uppercase font-medium text-vs-brand-text opacity-65">
               Real-Time Enrichment Active
             </span>
           </div>
@@ -802,10 +750,7 @@ export default function ConversationComponent({
       </div>
 
       {/* ── Bottom control bar ────────────────────────────────────────────────── */}
-      <div
-        className="flex items-center justify-center gap-4 md:gap-8 py-3 md:py-4 px-3 md:px-6 shrink-0 flex-wrap"
-        style={{ borderTop: '1px solid rgba(122,86,170,0.2)' }}
-      >
+      <div className="flex items-center justify-center gap-4 md:gap-8 py-3 md:py-4 px-3 md:px-6 shrink-0 flex-wrap border-t border-vs-border-hdr">
         {/* Mute toggle */}
         <button
           onClick={handleMicToggle}
@@ -813,21 +758,18 @@ export default function ConversationComponent({
           aria-label={isEnabled ? 'Mute microphone' : 'Unmute microphone'}
         >
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-200"
-            style={{
-              backgroundColor: isEnabled ? 'rgba(255,255,255,0.07)' : 'rgba(122,86,170,0.3)',
-              border: `1px solid ${isEnabled ? 'rgba(255,255,255,0.12)' : 'rgba(122,86,170,0.5)'}`,
-            }}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-200 border ${
+              isEnabled
+                ? 'bg-vs-ctrl-bg border-vs-ctrl-border'
+                : 'bg-vs-ctrl-active-bg border-vs-ctrl-active-border'
+            }`}
           >
             {isEnabled
-              ? <Mic    className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.65)' }} />
-              : <MicOff className="w-5 h-5" style={{ color: '#B89AE3' }} />
+              ? <Mic    className="w-5 h-5 text-vs-ctrl-icon" />
+              : <MicOff className="w-5 h-5 text-vs-brand-text" />
             }
           </div>
-          <span
-            className="text-[10px] tracking-[0.15em] uppercase font-medium"
-            style={{ color: 'rgba(255,255,255,0.38)' }}
-          >
+          <span className="text-[10px] tracking-[0.15em] uppercase font-medium text-vs-fg-muted">
             {isEnabled ? 'Mute' : 'Unmute'}
           </span>
         </button>
@@ -835,10 +777,7 @@ export default function ConversationComponent({
         {/* End session */}
         <button
           onClick={onEndConversation}
-          className="flex items-center gap-2.5 px-4 md:px-8 py-2 md:py-3 ml-2 md:ml-4 mb-1 md:mb-2 rounded-full text-white font-semibold text-sm transition-colors duration-200"
-          style={{ backgroundColor: '#dc2626' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#b91c1c'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#dc2626'; }}
+          className="flex items-center gap-2.5 px-4 md:px-8 py-2 md:py-3 ml-2 md:ml-4 mb-1 md:mb-2 rounded-full text-white font-semibold text-sm transition-colors duration-200 bg-red-600 hover:bg-red-700"
           aria-label="End conversation"
         >
           <PhoneOff className="w-4 h-4" />
@@ -847,19 +786,10 @@ export default function ConversationComponent({
 
         {/* Microphone selector */}
         <div className="flex flex-col items-center gap-1.5">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center"
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.12)',
-            }}
-          >
+          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-vs-ctrl-bg border border-vs-ctrl-border">
             <MicrophoneSelector localMicrophoneTrack={localMicrophoneTrack} />
           </div>
-          <span
-            className="text-[10px] tracking-[0.15em] uppercase font-medium"
-            style={{ color: 'rgba(255,255,255,0.38)' }}
-          >
+          <span className="text-[10px] tracking-[0.15em] uppercase font-medium text-vs-fg-muted">
             Microphone
           </span>
         </div>

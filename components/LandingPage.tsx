@@ -1,7 +1,7 @@
 "use client";
 
 import type { RTMClient } from "agora-rtm";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sun, Moon } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import type {
   ClientStartRequest,
 } from "../types/conversation";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { useTheme } from "@/hooks/useTheme";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 
 const ConversationComponent = dynamic(() => import("./ConversationComponent"), {
@@ -75,6 +76,7 @@ export default function LandingPage() {
   const [agoraData, setAgoraData] = useState<AgoraTokenData | null>(null);
   const [rtmClient, setRtmClient] = useState<RTMClient | null>(null);
   const [agentJoinError, setAgentJoinError] = useState(false);
+  const { isDark, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     import("agora-rtc-react").catch(() => {});
@@ -147,9 +149,9 @@ export default function LandingPage() {
 
   if (!AGORA_APP_ID) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#09061c] text-white gap-4 p-8 text-center">
-        <p className="text-sm text-white/50 max-w-sm">
-          <code className="bg-[#7A56AA]/20 px-1.5 py-0.5 rounded text-[#B89AE3] font-mono">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center bg-vs-page text-vs-fg">
+        <p className="text-sm max-w-sm text-vs-fg-muted">
+          <code className="bg-vs-brand-acc px-1.5 py-0.5 rounded text-vs-brand-text font-mono">
             NEXT_PUBLIC_AGORA_APP_ID
           </code>{" "}
           is not set. Add it to your environment and restart.
@@ -239,7 +241,7 @@ export default function LandingPage() {
     return (
       <div className="relative">
         {agentJoinError && (
-          <div className="absolute top-14 left-0 right-0 z-50 bg-[#3B0B94]/80 text-[#B89AE3] text-xs text-center py-1.5 px-4 border-b border-[#7A56AA]/30">
+          <div className="absolute top-14 left-0 right-0 z-50 text-xs text-center py-1.5 px-4 border-b border-vs-border-md text-vs-brand-text" style={{ backgroundColor: 'rgba(59,11,148,0.85)' }}>
             Agent connection failed — conversation may not work as expected.
           </div>
         )}
@@ -266,15 +268,23 @@ export default function LandingPage() {
 
   // ── Pre-call landing page ────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#09061c] text-white relative overflow-hidden p-6">
-      {/* Ambient Stage Violet glow — background only, per brand gradient rules */}
+    <div
+      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden p-6 bg-vs-page text-vs-fg"
+    >
+      {/* Theme toggle */}
+      <button
+        onClick={toggleTheme}
+        className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center transition-colors duration-200 bg-vs-ctrl-bg border border-vs-border-md text-vs-ctrl-icon"
+        aria-label="Toggle theme"
+      >
+        {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      </button>
+
+      {/* Ambient glow */}
       <div
         className="absolute inset-0 pointer-events-none"
         aria-hidden="true"
-        style={{
-          background:
-            "radial-gradient(ellipse 65% 55% at 50% 55%, rgba(59,11,148,0.28) 0%, transparent 70%)",
-        }}
+        style={{ background: 'var(--vs-ambient)' }}
       />
 
       <div className="z-10 flex flex-col items-center gap-10 w-full max-w-sm animate-fade-up">
@@ -288,13 +298,13 @@ export default function LandingPage() {
             className="rounded-2xl"
             priority
           />
-          <span className="text-[10px] text-white/30 tracking-[0.22em] uppercase font-medium">
+          <span className="text-[10px] tracking-[0.22em] uppercase font-medium text-vs-fg-dim">
             Speech Intelligence
           </span>
         </div>
 
         {/* Demo configuration card */}
-        <div className="w-full flex flex-col gap-5 border border-[#7A56AA]/20 rounded-2xl bg-[#0e0b22]/70 p-4 sm:p-6 backdrop-blur-sm">
+        <div className="w-full flex flex-col gap-5 rounded-2xl p-4 sm:p-6 backdrop-blur-sm bg-vs-card border border-vs-border-md">
           {/* Demo identity — Coke CX context */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center font-bold text-white text-sm select-none shrink-0">
@@ -304,19 +314,19 @@ export default function LandingPage() {
               <p className="text-sm font-semibold leading-tight tracking-tight">
                 Coke CX
               </p>
-              <p className="text-[10px] text-white/35 tracking-[0.15em] uppercase leading-tight mt-0.5">
+              <p className="text-[10px] text-vs-fg-muted tracking-[0.15em] uppercase leading-tight mt-0.5">
                 Valsea Voice Agent Demo
               </p>
             </div>
           </div>
 
-          <div className="h-px bg-[#7A56AA]/15" />
+          <div className="h-px bg-vs-divider" />
 
           {/* Agent Language selector */}
           <div className="flex flex-col gap-2">
             <label
               htmlFor="language-select"
-              className="text-[10px] text-white/35 tracking-[0.18em] uppercase font-medium"
+              className="text-[10px] text-vs-fg-muted tracking-[0.18em] uppercase font-medium"
             >
               Agent Language
             </label>
@@ -325,14 +335,13 @@ export default function LandingPage() {
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
               disabled={isLoading}
-              className="w-full h-10 rounded-lg border border-[#7A56AA]/25 px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#7A56AA]/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 appearance-none"
-              style={{ backgroundColor: "rgba(122,86,170,0.08)" }}
+              className="w-full h-10 rounded-lg border border-vs-border-md px-3 text-sm text-vs-fg bg-vs-select-bg focus:outline-none focus:ring-1 focus:ring-vs-brand disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 appearance-none"
             >
               {LANGUAGE_OPTIONS.map((opt) => (
                 <option
                   key={opt.code}
                   value={opt.code}
-                  className="bg-[#120e28] text-white"
+                  className="bg-vs-select-option text-vs-fg"
                 >
                   {opt.label}
                 </option>
@@ -375,11 +384,7 @@ export default function LandingPage() {
             onClick={handleStartConversation}
             disabled={isLoading}
             className="w-full h-11 rounded-lg text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
-            style={{
-              background: isLoading
-                ? "rgba(122,86,170,0.4)"
-                : "linear-gradient(135deg, #3B0B94 0%, #7A56AA 100%)",
-            }}
+            style={{ background: isLoading ? 'var(--vs-btn-loading)' : 'var(--vs-btn-gradient)' }}
             aria-label={
               isLoading ? "Starting conversation" : "Start conversation"
             }
@@ -395,14 +400,14 @@ export default function LandingPage() {
           </button>
 
           {error && (
-            <p className="text-xs text-[#B89AE3]/70 text-center leading-relaxed">
+            <p className="text-xs text-vs-brand-text opacity-70 text-center leading-relaxed">
               {error}
             </p>
           )}
         </div>
 
         {/* Locked brand sentence */}
-        <p className="text-[11px] text-white/22 text-center tracking-wide">
+        <p className="text-[11px] text-vs-fg-dim text-center tracking-wide">
           VALSEA — Built for the Way Asia Really Speaks.
         </p>
       </div>

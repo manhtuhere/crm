@@ -68,18 +68,10 @@ const LIVENESS_STYLE: Record<string, { badge: string; label: string }> = {
 
 function PanelShell({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div
-      className="rounded-xl p-4 flex flex-col gap-3"
-      style={{
-        backgroundColor: 'rgba(255,255,255,0.025)',
-        border: '1px solid rgba(122,86,170,0.22)',
-      }}
-    >
+    <div className="rounded-xl p-4 flex flex-col gap-3 bg-vs-surface border border-vs-border-md">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold tracking-tight" style={{ color: 'rgba(255,255,255,0.9)' }}>
-          {title}
-        </span>
-        <span style={{ color: 'rgba(184,154,227,0.45)' }}>{icon}</span>
+        <span className="text-sm font-semibold tracking-tight text-vs-fg">{title}</span>
+        <span className="text-vs-brand-text opacity-45">{icon}</span>
       </div>
       {children}
     </div>
@@ -88,10 +80,7 @@ function PanelShell({ title, icon, children }: { title: string; icon: React.Reac
 
 function MetricLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      className="text-[9px] font-medium tracking-[0.18em] uppercase"
-      style={{ color: 'rgba(255,255,255,0.38)' }}
-    >
+    <span className="text-[9px] font-medium tracking-[0.18em] uppercase text-vs-fg-muted">
       {children}
     </span>
   );
@@ -100,19 +89,13 @@ function MetricLabel({ children }: { children: React.ReactNode }) {
 function ScoreBar({ value, color }: { value: number; color: string }) {
   return (
     <div className="flex items-center gap-3 flex-1">
-      <div
-        className="flex-1 h-2 rounded-full overflow-hidden"
-        style={{ backgroundColor: 'rgba(255,255,255,0.07)' }}
-      >
+      <div className="flex-1 h-2 rounded-full overflow-hidden bg-vs-bar-track">
         <div
           className="h-full rounded-full transition-all duration-700"
           style={{ width: `${Math.round(value * 100)}%`, backgroundColor: color }}
         />
       </div>
-      <span
-        className="text-xs font-semibold tabular-nums w-8 text-right"
-        style={{ color: 'rgba(255,255,255,0.7)' }}
-      >
+      <span className="text-xs font-semibold tabular-nums w-8 text-right text-vs-fg-muted">
         {Math.round(value * 100)}%
       </span>
     </div>
@@ -121,7 +104,7 @@ function ScoreBar({ value, color }: { value: number; color: string }) {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center h-16 text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+    <div className="flex items-center justify-center h-16 text-xs text-vs-fg-dim">
       {label}
     </div>
   );
@@ -160,13 +143,13 @@ export function AnalysisPanel({
               </span>
               <div className="flex flex-col">
                 <MetricLabel>Confidence</MetricLabel>
-                <span className="text-sm font-semibold tabular-nums" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <span className="text-sm font-semibold tabular-nums text-vs-fg">
                   {Math.round(sentiment.confidence * 100)}%
                 </span>
               </div>
             </div>
             {sentiment.reasoning && (
-              <p className="text-xs leading-relaxed line-clamp-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              <p className="text-xs leading-relaxed line-clamp-3 text-vs-fg-muted">
                 {sentiment.reasoning}
               </p>
             )}
@@ -175,12 +158,7 @@ export function AnalysisPanel({
                 {sentiment.emotions.slice(0, 5).map((e) => (
                   <span
                     key={e}
-                    className="text-[10px] px-2 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: 'rgba(122,86,170,0.18)',
-                      border: '1px solid rgba(122,86,170,0.3)',
-                      color: 'rgba(184,154,227,0.8)',
-                    }}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-vs-pill-bg border border-vs-pill-border text-vs-pill-text"
                   >
                     {e}
                   </span>
@@ -260,18 +238,13 @@ export function AnalysisPanel({
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
               <span
-                className="text-xs font-bold px-3 py-1 rounded-full"
-                style={{
-                  backgroundColor: 'rgba(122,86,170,0.25)',
-                  border: '1px solid rgba(122,86,170,0.45)',
-                  color: '#B89AE3',
-                }}
+                className="text-xs font-bold px-3 py-1 rounded-full bg-vs-pill-bg border border-vs-pill-border text-vs-pill-text"
               >
                 {intent.intent.replace(/_/g, ' ')}
               </span>
               <div className="flex flex-col">
                 <MetricLabel>Confidence</MetricLabel>
-                <span className="text-sm font-semibold tabular-nums" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <span className="text-sm font-semibold tabular-nums text-vs-fg">
                   {Math.round(intent.confidence * 100)}%
                 </span>
               </div>
@@ -294,7 +267,7 @@ export function AnalysisPanel({
               </div>
             )}
             {intent.action_suggestion && (
-              <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              <p className="text-xs leading-relaxed text-vs-fg-muted">
                 {intent.action_suggestion}
               </p>
             )}
@@ -303,11 +276,7 @@ export function AnalysisPanel({
                 {intent.tags.slice(0, 6).map((tag) => (
                   <span
                     key={tag}
-                    className="text-[9px] px-1.5 py-0.5 rounded"
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.05)',
-                      color: 'rgba(255,255,255,0.28)',
-                    }}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-vs-tag-bg text-vs-tag-text"
                   >
                     {tag}
                   </span>

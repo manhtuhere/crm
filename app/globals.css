@@ -198,6 +198,136 @@ body {
   background-color: hsl(var(--background));
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Valsea design tokens — light / dark split
+   Mapped to Tailwind utilities via tailwind.config.ts → theme.extend.colors.vs
+   ═══════════════════════════════════════════════════════════════════════════
+
+   LIGHT (:root)                         DARK (.dark)
+   ─────────────────────────────────     ─────────────────────────────────── */
+
+/* ── Page & Surface ─────────────────────────────────────────────────────── */
+:root {
+  --vs-page:    #f5f3ff;
+  --vs-card:    rgba(255, 255, 255, 0.95);
+  --vs-surface: rgba(232, 228, 252, 0.55);
+  --vs-overlay: rgba(122, 86, 170, 0.05);
+}
+.dark {
+  --vs-page:    #09061c;
+  --vs-card:    rgba(14, 11, 34, 0.70);
+  --vs-surface: rgba(255, 255, 255, 0.025);
+  --vs-overlay: rgba(122, 86, 170, 0.06);
+}
+
+/* ── Foreground / Text ──────────────────────────────────────────────────── */
+:root {
+  --vs-fg:       #1a1035;                  /* contrast 16:1 on --vs-page */
+  --vs-fg-muted: rgba(26, 16, 53, 0.68);  /* ~6:1 */
+  --vs-fg-dim:   rgba(26, 16, 53, 0.50);  /* ~3.7:1 */
+}
+.dark {
+  --vs-fg:       #ffffff;
+  --vs-fg-muted: rgba(255, 255, 255, 0.62);  /* ~6:1 on dark page */
+  --vs-fg-dim:   rgba(255, 255, 255, 0.45);  /* ~4.5:1 on dark page */
+}
+
+/* ── Border ─────────────────────────────────────────────────────────────── */
+:root {
+  --vs-border:     rgba(122, 86, 170, 0.16);
+  --vs-border-md:  rgba(122, 86, 170, 0.26);
+  --vs-border-hdr: rgba(122, 86, 170, 0.14);
+}
+.dark {
+  --vs-border:     rgba(122, 86, 170, 0.15);
+  --vs-border-md:  rgba(122, 86, 170, 0.35);
+  --vs-border-hdr: rgba(122, 86, 170, 0.20);
+}
+
+/* ── Brand ──────────────────────────────────────────────────────────────── */
+:root {
+  --vs-brand:         #7A56AA;           /* same hue, works on both */
+  --vs-brand-text:    #5b3a8f;          /* darkened for WCAG AA on light */
+  --vs-brand-acc:     rgba(122, 86, 170, 0.10);
+  --vs-divider:       rgba(122, 86, 170, 0.12);
+  --vs-select-bg:     rgba(122, 86, 170, 0.06);
+  --vs-select-option: #f5f3ff;
+  --vs-btn-gradient:  linear-gradient(135deg, #3B0B94 0%, #7A56AA 100%);
+  --vs-btn-loading:   rgba(122, 86, 170, 0.40);
+}
+.dark {
+  --vs-brand:         #7A56AA;
+  --vs-brand-text:    #B89AE3;          /* lightened for contrast on dark */
+  --vs-brand-acc:     rgba(122, 86, 170, 0.10);
+  --vs-divider:       rgba(122, 86, 170, 0.12);
+  --vs-select-bg:     rgba(122, 86, 170, 0.08);
+  --vs-select-option: #120e28;
+  --vs-btn-gradient:  linear-gradient(135deg, #3B0B94 0%, #7A56AA 100%);
+  --vs-btn-loading:   rgba(122, 86, 170, 0.40);
+}
+
+/* ── Controls (mute btn, mic selector) ─────────────────────────────────── */
+:root {
+  --vs-ctrl-bg:            rgba(0, 0, 0, 0.05);
+  --vs-ctrl-border:        rgba(0, 0, 0, 0.10);
+  --vs-ctrl-icon:          rgba(26, 16, 53, 0.72);  /* ~5.4:1 */
+  --vs-ctrl-active-bg:     rgba(122, 86, 170, 0.22);
+  --vs-ctrl-active-border: rgba(122, 86, 170, 0.42);
+}
+.dark {
+  --vs-ctrl-bg:            rgba(255, 255, 255, 0.07);
+  --vs-ctrl-border:        rgba(255, 255, 255, 0.12);
+  --vs-ctrl-icon:          rgba(255, 255, 255, 0.65);
+  --vs-ctrl-active-bg:     rgba(122, 86, 170, 0.30);
+  --vs-ctrl-active-border: rgba(122, 86, 170, 0.50);
+}
+
+/* ── Transcript messages ────────────────────────────────────────────────── */
+:root {
+  --vs-msg-agent-bg:     rgba(122, 86, 170, 0.08);
+  --vs-msg-agent-border: rgba(122, 86, 170, 0.20);
+  --vs-msg-agent-text:   #5b3a8f;
+}
+.dark {
+  --vs-msg-agent-bg:     rgba(59, 11, 148, 0.20);
+  --vs-msg-agent-border: rgba(122, 86, 170, 0.22);
+  --vs-msg-agent-text:   rgba(255, 255, 255, 0.85);
+}
+
+/* ── Analysis panel pills / tags ────────────────────────────────────────── */
+:root {
+  --vs-pill-bg:     rgba(122, 86, 170, 0.10);
+  --vs-pill-border: rgba(122, 86, 170, 0.22);
+  --vs-pill-text:   #5b3a8f;
+  --vs-tag-bg:      rgba(26, 16, 53, 0.07);
+  --vs-tag-text:    rgba(26, 16, 53, 0.58);  /* ~4.2:1 */
+  --vs-bar-track:   rgba(26, 16, 53, 0.07);
+}
+.dark {
+  --vs-pill-bg:     rgba(122, 86, 170, 0.18);
+  --vs-pill-border: rgba(122, 86, 170, 0.30);
+  --vs-pill-text:   rgba(184, 154, 227, 0.90);
+  --vs-tag-bg:      rgba(255, 255, 255, 0.06);
+  --vs-tag-text:    rgba(255, 255, 255, 0.50);  /* ~4.6:1 */
+  --vs-bar-track:   rgba(255, 255, 255, 0.07);
+}
+
+/* ── Gradients (can't be Tailwind utilities — used via style={{ background: 'var(...)' }}) */
+:root {
+  --vs-ambient:        radial-gradient(ellipse 65% 55% at 50% 55%, rgba(59,11,148,0.08) 0%, transparent 70%);
+  --vs-vignette:       radial-gradient(circle, transparent 35%, rgba(245,243,255,0.80) 58%, #f5f3ff 75%);
+  --vs-robot-vignette: radial-gradient(circle, transparent 42%, rgba(245,243,255,0.70) 65%, #f5f3ff 80%);
+}
+.dark {
+  --vs-ambient:        radial-gradient(ellipse 65% 55% at 50% 55%, rgba(59,11,148,0.28) 0%, transparent 70%);
+  --vs-vignette:       radial-gradient(circle, transparent 35%, rgba(9,6,28,0.75) 58%, #09061c 75%);
+  --vs-robot-vignette: radial-gradient(circle, transparent 42%, rgba(9,6,28,0.65) 65%, #09061c 80%);
+}
+
+/* ── Robot blend mode (keyword property — CSS class is safer than var()) ── */
+.vs-robot-blend       { mix-blend-mode: normal; }
+.dark .vs-robot-blend { mix-blend-mode: screen; }
+
 /* --- Entry animations --- */
 
 @keyframes fade-up {

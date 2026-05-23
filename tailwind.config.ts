@@ -15,6 +15,39 @@ const config: Config = {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
       },
   		colors: {
+        // ── Valsea brand tokens (values defined in globals.css :root / .dark) ──
+        vs: {
+          page:           'var(--vs-page)',
+          card:           'var(--vs-card)',
+          surface:        'var(--vs-surface)',
+          overlay:        'var(--vs-overlay)',
+          fg:             'var(--vs-fg)',
+          'fg-muted':     'var(--vs-fg-muted)',
+          'fg-dim':       'var(--vs-fg-dim)',
+          brand:          'var(--vs-brand)',
+          'brand-text':   'var(--vs-brand-text)',
+          'brand-acc':    'var(--vs-brand-acc)',
+          border:         'var(--vs-border)',
+          'border-md':    'var(--vs-border-md)',
+          'border-hdr':   'var(--vs-border-hdr)',
+          'ctrl-bg':             'var(--vs-ctrl-bg)',
+          'ctrl-border':         'var(--vs-ctrl-border)',
+          'ctrl-icon':           'var(--vs-ctrl-icon)',
+          'ctrl-active-bg':      'var(--vs-ctrl-active-bg)',
+          'ctrl-active-border':  'var(--vs-ctrl-active-border)',
+          'msg-agent-bg':     'var(--vs-msg-agent-bg)',
+          'msg-agent-border': 'var(--vs-msg-agent-border)',
+          'msg-agent-text':   'var(--vs-msg-agent-text)',
+          'pill-bg':      'var(--vs-pill-bg)',
+          'pill-border':  'var(--vs-pill-border)',
+          'pill-text':    'var(--vs-pill-text)',
+          'tag-bg':       'var(--vs-tag-bg)',
+          'tag-text':     'var(--vs-tag-text)',
+          divider:        'var(--vs-divider)',
+          'select-bg':    'var(--vs-select-bg)',
+          'select-option':'var(--vs-select-option)',
+        },
+        // ── Shadcn/Agora semantic tokens ─────────────────────────────────────
         // The <alpha-value> placeholder enables Tailwind opacity modifiers like
         // bg-primary/90, bg-card/80, bg-destructive/10, etc.
         // Without it, hsl(var(--token)) can't accept an alpha channel at utility-class time.

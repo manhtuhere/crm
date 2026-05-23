@@ -30,8 +30,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${inter.variable}`}>
-      <body suppressHydrationWarning={true}>{children}</body>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        {/* Set .dark before first paint to prevent flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('valsea-theme');if(t!=='light')document.documentElement.classList.add('dark');}catch(e){}`,
+          }}
+        />
+      </head>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }
