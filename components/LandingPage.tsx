@@ -51,18 +51,8 @@ const AgoraProvider = dynamic(
 
 // Valsea-ASR-supported languages
 const LANGUAGE_OPTIONS = [
+  { label: "English", code: "en" },
   { label: "Vietnamese (Tiếng Việt)", code: "vi" },
-  { label: "Indonesian (Bahasa Indonesia)", code: "id" },
-  { label: "Malay (Bahasa Melayu)", code: "ms" },
-  { label: "Thai (ภาษาไทย)", code: "th" },
-  { label: "Filipino (Tagalog)", code: "tl" },
-  { label: "Tamil (தமிழ்)", code: "ta" },
-  { label: "Khmer (ភាសាខ្មែរ)", code: "km" },
-  { label: "Chinese – Mandarin (普通话)", code: "zh" },
-  { label: "Chinese – Cantonese (廣東話)", code: "yue" },
-  { label: "Korean (한국어)", code: "ko" },
-  { label: "Japanese (日本語)", code: "ja" },
-  { label: "Hindi (हिन्दी)", code: "hi" },
 ] as const;
 
 const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;
@@ -75,7 +65,6 @@ export default function LandingPage() {
   const [error, setError] = useState<string | null>(null);
   const [agoraData, setAgoraData] = useState<AgoraTokenData | null>(null);
   const [rtmClient, setRtmClient] = useState<RTMClient | null>(null);
-  const [agentJoinError, setAgentJoinError] = useState(false);
   const { isDark, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -163,7 +152,6 @@ export default function LandingPage() {
   const handleStartConversation = async () => {
     setIsLoading(true);
     setError(null);
-    setAgentJoinError(false);
     try {
       const agoraResponse = await fetch("/api/generate-agora-token");
       const responseData = await agoraResponse.json();
@@ -173,43 +161,16 @@ export default function LandingPage() {
         );
       }
 
-      const [agentData, rtm] = await Promise.all([
-        fetch("/api/invite-agent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            requester_id: responseData.uid,
-            channel_name: responseData.channel,
-            languageCode: selectedLanguage,
-            allowLanguageSwitching,
-          } as ClientStartRequest),
-        })
-          .then(async (res) => {
-            if (!res.ok) {
-              setAgentJoinError(true);
-              return null;
-            }
-            return res.json() as Promise<AgentResponse>;
-          })
-          .catch((err) => {
-            console.error("Failed to start agent:", err);
-            setAgentJoinError(true);
-            return null;
-          }),
-        (async () => {
-          const { default: AgoraRTM } = await import("agora-rtm");
-          const rtm: RTMClient = new AgoraRTM.RTM(
-            process.env.NEXT_PUBLIC_AGORA_APP_ID!,
-            String(Date.now()),
-          );
-          await rtm.login({ token: responseData.token });
-          await rtm.subscribe(responseData.channel);
-          return rtm;
-        })(),
-      ]);
+      const { default: AgoraRTM } = await import("agora-rtm");
+      const rtm: RTMClient = new AgoraRTM.RTM(
+        process.env.NEXT_PUBLIC_AGORA_APP_ID!,
+        String(Date.now()),
+      );
+      await rtm.login({ token: responseData.token });
+      await rtm.subscribe(responseData.channel);
 
       setRtmClient(rtm);
-      setAgoraData({ ...responseData, agentId: agentData?.agent_id });
+      setAgoraData(responseData);
       setShowConversation(true);
     } catch (err) {
       setError("Failed to start conversation. Please try again.");
@@ -219,18 +180,7 @@ export default function LandingPage() {
     }
   };
 
-  const handleEndConversation = async () => {
-    if (agoraData?.agentId) {
-      try {
-        await fetch("/api/stop-conversation", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agent_id: agoraData.agentId }),
-        });
-      } catch (err) {
-        console.error("Error stopping agent:", err);
-      }
-    }
+  const handleEndConversation = () => {
     rtmClient?.logout().catch((err) => console.error("RTM logout error:", err));
     setRtmClient(null);
     setShowConversation(false);
@@ -240,11 +190,6 @@ export default function LandingPage() {
   if (showConversation && agoraData && rtmClient) {
     return (
       <div className="relative">
-        {agentJoinError && (
-          <div className="absolute top-14 left-0 right-0 z-50 text-xs text-center py-1.5 px-4 border-b border-vs-border-md text-vs-brand-text" style={{ backgroundColor: 'rgba(59,11,148,0.85)' }}>
-            Agent connection failed — conversation may not work as expected.
-          </div>
-        )}
         <Suspense fallback={<LoadingSkeleton />}>
           <ErrorBoundary>
             <AgoraProvider>

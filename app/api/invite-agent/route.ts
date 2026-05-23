@@ -167,12 +167,11 @@ const agentUid = process.env.NEXT_PUBLIC_AGENT_UID ?? String(DEFAULT_AGENT_UID);
 // Only languages supported by Valsea ASR are active.
 // Languages without Valsea ASR support are commented out.
 const LANGUAGE_CONFIG: Record<string, { voiceId: string; instruction: string; greeting: string }> = {
-  // ── Not supported by Valsea ASR ──────────────────────────────────────────
-  // en: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in English, regardless of what language the user speaks.',
-  //   greeting: "Hi there! You've reached Coca-Cola Customer Support. I'm Maya. How can I help you today?",
-  // },
+  en: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in English, regardless of what language the user speaks.',
+    greeting: "Hi there! You've reached Coca-Cola Customer Support. I'm Maya. How can I help you today?",
+  },
   vi: {
     voiceId: 'English_captivating_female1',
     instruction: 'Always respond in Vietnamese (Tiếng Việt), regardless of what language the user speaks.',
@@ -283,10 +282,8 @@ function requireEnv(name: string): string {
 }
 
 // Valsea language name strings as expected by the valsea-rtt model.
-// Only languages confirmed supported by Valsea ASR are listed here.
-// Languages absent from this map (en, zh, ja, ko, fr, es, my, sg-en, hi, pa, bn, te, mr, kn)
-// are not supported by Valsea ASR and are commented out throughout this file and LandingPage.tsx.
 const VALSEA_ASR_LANGUAGE: Record<string, string> = {
+  en: 'english',
   vi: 'vietnamese',
   id: 'indonesian',
   ms: 'malay',
@@ -437,11 +434,11 @@ export async function POST(request: NextRequest) {
       maxHistory: 50,
       turnDetection: {
         config: {
-          speech_threshold: 0.5,
+          speech_threshold: 0.6,
           start_of_speech: {
             mode: 'vad',
             vad_config: {
-              interrupt_duration_ms: 160,
+              interrupt_duration_ms: 320,
               prefix_padding_ms: 300,
             },
           },
