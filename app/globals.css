@@ -498,3 +498,10 @@ strong {
     max-height: min(20rem, calc(100vh - 14rem));
   }
 }
+
+/* Right transcript panel: no border on mobile (tab bar above separates), left border on desktop */
+@media (min-width: 768px) {
+  .conversation-right-panel {
+    border-left: 1px solid rgba(122,86,170,0.15);
+  }
+}

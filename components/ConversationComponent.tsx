@@ -110,6 +110,7 @@ export default function ConversationComponent({
   const [isSentimentUnavailable, setIsSentimentUnavailable] = useState(false);
   const [isVoiceSecurityUnavailable, setIsVoiceSecurityUnavailable] = useState(false);
   const [isIntentUnavailable, setIsIntentUnavailable]     = useState(false);
+  const [mobileTab, setMobileTab] = useState<'transcript' | 'analysis'>('transcript');
   const prevUserMsgCountRef = useRef(0);
   const prevIntentMsgCountRef = useRef(0);
 
@@ -495,7 +496,7 @@ export default function ConversationComponent({
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <header
-        className="flex items-center justify-between px-6 py-3 shrink-0"
+        className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3 shrink-0"
         style={{ borderBottom: '1px solid rgba(122,86,170,0.2)' }}
       >
         <div className="flex items-center gap-2">
@@ -529,11 +530,11 @@ export default function ConversationComponent({
       </header>
 
       {/* ── Three-column main ────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden min-h-0">
+      <div className="flex flex-1 overflow-hidden min-h-0 flex-col md:flex-row">
 
-        {/* Left: Analysis panels + selectors */}
+        {/* Left: Analysis panels — tab-controlled on mobile, always visible on desktop */}
         <div
-          className="w-[450px] flex flex-col shrink-0 overflow-y-auto overflow-hidden"
+          className={`order-3 md:order-1 ${mobileTab === 'analysis' ? 'flex' : 'hidden'} md:flex flex-col flex-1 md:flex-none md:w-[450px] shrink-0 overflow-y-auto overflow-hidden`}
           style={{ borderRight: '1px solid rgba(122,86,170,0.15)' }}
         >
           <div className="p-4 flex flex-col gap-3 flex-1">
@@ -557,7 +558,7 @@ export default function ConversationComponent({
         </div>
 
         {/* Center: Robot mascot + visualizer + status */}
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8 relative overflow-hidden">
+        <div className="order-1 md:order-2 shrink-0 md:flex-1 flex flex-col items-center justify-center gap-4 md:gap-6 p-4 md:p-8 relative overflow-hidden">
           {/* Ambient purple glow */}
           <div
             className="absolute inset-0 pointer-events-none"
@@ -568,13 +569,12 @@ export default function ConversationComponent({
           />
 
           {/* Robot image with edge vignette */}
-          <div className="relative z-10" style={{ width: 220, height: 220 }}>
+          <div className="relative z-10 w-[140px] h-[140px] md:w-[220px] md:h-[220px]">
             <Image
               src="/valsea-robot2.png"
               alt="Valsea AI mascot"
-              width={220}
-              height={220}
-              style={{ objectFit: 'contain', mixBlendMode: 'screen' }} 
+              fill
+              style={{ objectFit: 'contain', mixBlendMode: 'screen' }}
               priority
             />
             {/* Radial fade to blend robot edges into dark background */}
@@ -610,18 +610,35 @@ export default function ConversationComponent({
 
           {/* Status text */}
           <div className="z-10 text-center">
-            <p className="text-xl font-semibold tracking-tight">{centerStateText}</p>
-            <p className="text-sm mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <p className="text-base md:text-xl font-semibold tracking-tight">{centerStateText}</p>
+            <p className="text-xs md:text-sm mt-1 md:mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
               Processing real-time audio with low latency
             </p>
           </div>
         </div>
 
-        {/* Right: Transcript */}
+        {/* Mobile tab bar — hidden on desktop */}
         <div
-          className="w-[450px] flex flex-col shrink-0 overflow-hidden"
-          style={{ borderLeft: '1px solid rgba(122,86,170,0.15)' }}
+          className="order-2 md:hidden flex shrink-0"
+          style={{ borderBottom: '1px solid rgba(122,86,170,0.2)' }}
         >
+          {(['transcript', 'analysis'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setMobileTab(tab)}
+              className="flex-1 py-2.5 text-xs font-semibold tracking-[0.15em] uppercase transition-colors duration-200"
+              style={{
+                color: mobileTab === tab ? '#B89AE3' : 'rgba(255,255,255,0.35)',
+                borderBottom: mobileTab === tab ? '2px solid #7A56AA' : '2px solid transparent',
+              }}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Right: Transcript */}
+        <div className={`order-4 md:order-3 ${mobileTab === 'transcript' ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none md:w-[450px] flex-col shrink-0 overflow-hidden conversation-right-panel`}>
           {/* Transcript header */}
           <div
             className="flex items-center justify-between px-4 py-3 shrink-0"
@@ -786,7 +803,7 @@ export default function ConversationComponent({
 
       {/* ── Bottom control bar ────────────────────────────────────────────────── */}
       <div
-        className="flex items-center justify-center gap-8 py-4 px-6 shrink-0"
+        className="flex items-center justify-center gap-4 md:gap-8 py-3 md:py-4 px-3 md:px-6 shrink-0 flex-wrap"
         style={{ borderTop: '1px solid rgba(122,86,170,0.2)' }}
       >
         {/* Mute toggle */}
@@ -818,7 +835,7 @@ export default function ConversationComponent({
         {/* End session */}
         <button
           onClick={onEndConversation}
-          className="flex items-center gap-2.5 px-8 py-3 ml-4 mb-2 rounded-full text-white font-semibold text-sm transition-colors duration-200"
+          className="flex items-center gap-2.5 px-4 md:px-8 py-2 md:py-3 ml-2 md:ml-4 mb-1 md:mb-2 rounded-full text-white font-semibold text-sm transition-colors duration-200"
           style={{ backgroundColor: '#dc2626' }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#b91c1c'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#dc2626'; }}

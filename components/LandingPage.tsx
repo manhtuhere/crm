@@ -294,7 +294,7 @@ export default function LandingPage() {
         </div>
 
         {/* Demo configuration card */}
-        <div className="w-full flex flex-col gap-5 border border-[#7A56AA]/20 rounded-2xl bg-[#0e0b22]/70 p-6 backdrop-blur-sm">
+        <div className="w-full flex flex-col gap-5 border border-[#7A56AA]/20 rounded-2xl bg-[#0e0b22]/70 p-4 sm:p-6 backdrop-blur-sm">
           {/* Demo identity — Coke CX context */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center font-bold text-white text-sm select-none shrink-0">
