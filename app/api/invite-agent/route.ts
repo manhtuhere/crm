@@ -12,12 +12,13 @@ import {
 } from 'agora-agent-server-sdk';
 import { ClientStartRequest, AgentResponse } from '@/types/conversation';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
+import { VALSEA_ASR_LANGUAGE } from '@/lib/languages';
 
 // System prompt that defines the agent's personality and behavior.
-const SYSTEM_PROMPT = `# SYSTEM PROMPT - BPO Contact Center Voice Agent
+const SYSTEM_PROMPT = `# SYSTEM PROMPT - Voice Call Support Agent
 
 # ROLE
-You are **Maya**, a professional **inbound voice support agent** on a contact-center floor (BPO operations such as Concentrix, TDCX, or similar).
+You are **Maya**, a professional **inbound voice support agent** on a live voice call.
 Your mission: **handle live voice calls** — verify the caller, resolve account and service issues, and escalate when needed. You support **multilingual queues**; callers may speak one language while you respond in the **queue language** defined at the end of these instructions.
 **Never mention you are an AI. Never break character.**
 Keep every spoken response under **40–50 words**.
@@ -50,7 +51,7 @@ Use this privately to route the call.
 
 # TONE & SPEAKING STYLE
 - Calm, clear, and respectful — contact-center standard.
-- Patient with accents and non-native speakers (common on APAC BPO floors).
+- Patient with accents and non-native speakers.
 - Never rush; sound like a trained agent, not a script reader.
 
 ---
@@ -100,8 +101,6 @@ const ADA_PROMPT = SYSTEM_PROMPT;
 const agentUid = process.env.NEXT_PUBLIC_AGENT_UID ?? String(DEFAULT_AGENT_UID);
 
 // Language → { voiceId, instruction, greeting }
-// Only languages supported by Valsea ASR are active.
-// Languages without Valsea ASR support are commented out.
 const LANGUAGE_CONFIG: Record<string, { voiceId: string; instruction: string; greeting: string }> = {
   en: {
     voiceId: 'English_captivating_female1',
@@ -115,32 +114,34 @@ const LANGUAGE_CONFIG: Record<string, { voiceId: string; instruction: string; gr
     greeting:
       'Xin chào, cảm ơn quý khách đã gọi. Đây là tổng đài hỗ trợ thoại — tôi là Maya. Tôi có thể hỗ trợ gì cho anh/chị hôm nay?',
   },
-  // zh: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Mandarin Chinese (普通话), regardless of what language the user speaks.',
-  //   greeting: '您好，感谢您的来电。这里是语音客服热线，我是Maya。请问今天有什么可以帮您？',
-  // },
-  // ja: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Japanese (日本語), regardless of what language the user speaks.',
-  //   greeting: 'お電話ありがとうございます。音声サポートのMayaです。本日はどのようなご用件でしょうか？',
-  // },
-  // ko: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Korean (한국어), regardless of what language the user speaks.',
-  //   greeting: '안녕하세요! 코카콜라 고객 지원센터입니다. 저는 Maya입니다. 오늘 어떻게 도와드릴까요?',
-  // },
-  // fr: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in French (Français), regardless of what language the user speaks.',
-  //   greeting: 'Bonjour ! Vous avez joint le Service Client contact center. Je suis Maya. Comment puis-je vous aider aujourd\'hui ?',
-  // },
-  // es: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Spanish (Español), regardless of what language the user speaks.',
-  //   greeting: '¡Hola! Ha llegado al Servicio de Atención al Cliente de contact center. Soy Maya. ¿En qué puedo ayudarle hoy?',
-  // },
-  // ── Supported by Valsea ASR ───────────────────────────────────────────────
+  zh: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Mandarin Chinese (普通话), regardless of what language the user speaks.',
+    greeting: '您好，感谢您的来电。这里是语音客服热线，我是Maya。请问今天有什么可以帮您？',
+  },
+  ja: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Japanese (日本語), regardless of what language the user speaks.',
+    greeting: 'お電話ありがとうございます。音声サポートのMayaです。本日はどのようなご用件でしょうか？',
+  },
+  ko: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Korean (한국어), regardless of what language the user speaks.',
+    greeting:
+      '안녕하세요. 전화 주셔서 감사합니다. 음성 지원입니다. Maya입니다. 무엇을 도와드릴까요?',
+  },
+  fr: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in French (Français), regardless of what language the user speaks.',
+    greeting:
+      "Bonjour, merci d'avoir appelé. Vous êtes en ligne avec le support vocal — je suis Maya. Comment puis-je vous aider ?",
+  },
+  es: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Spanish (Español), regardless of what language the user speaks.',
+    greeting:
+      'Hola, gracias por llamar. Está en la línea de soporte por voz — soy Maya. ¿En qué puedo ayudarle hoy?',
+  },
   id: {
     voiceId: 'English_captivating_female1',
     instruction: 'Always respond in Indonesian (Bahasa Indonesia), regardless of what language the user speaks.',
@@ -171,52 +172,61 @@ const LANGUAGE_CONFIG: Record<string, { voiceId: string; instruction: string; gr
     greeting:
       'வணக்கம், அழைத்ததற்கு நன்றி. இது எங்கள் குரல் ஆதரவு வரிசை — நான் Maya. இன்று எவ்வாறு உதவலாம்?',
   },
-  // my: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Burmese (မြန်မာဘာသာ), regardless of what language the user speaks.',
-  //   greeting: 'မင်္ဂလာပါ! contact center ဖောက်သည်ဝန်ဆောင်မှုသို့ ကြိုဆိုပါသည်။ ကျွန်မ Maya ပါ။ ဒီနေ့ ဘာကူညီပေးရမလဲ?',
-  // },
+  my: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Burmese (မြန်မာဘာသာ), regardless of what language the user speaks.',
+    greeting:
+      'မင်္ဂလာပါ။ ဖုန်းဆက်သည့်အတွက် ကျေးဇူးတင်ပါသည်။ အသံအကူအညီဝန်ဆောင်မှုဖြစ်ပါသည်။ ကျွန်မ Maya ပါ။ ဒီနေ့ ဘာကူညီပေးရမလဲ?',
+  },
   km: {
     voiceId: 'English_captivating_female1',
     instruction: 'Always respond in Khmer (ភាសាខ្មែរ), regardless of what language the user speaks.',
     greeting:
       'សួស្តី សូមអរគុណដែលបានហៅមក។ នេះជាខ្សែជំនួយសំឡេងរបស់យើង — ខ្ញុំឈ្មោះ Maya ។ តើខ្ញុំអាចជួយអ្វីបានថ្ងៃនេះ?',
   },
-  // 'sg-en': {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Singlish (Singaporean English creole). Use characteristic Singlish features: sentence-final particles like "lah", "leh", "lor", "meh", "sia", "can?"; direct grammar influenced by Malay and Hokkien; and a casual, friendly tone. For example: "Can do one lah, no worries!" or "Wah, that one very good leh."',
-  //   greeting: "Hey there lah! You've reached contact center Customer Support. I'm Maya. How can I help you today?",
-  // },
-  // hi: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Hindi (हिन्दी), regardless of what language the user speaks.',
-  //   greeting: 'नमस्ते! आप contact center के ग्राहक सेवा से जुड़े हैं। मैं Maya हूँ। आज मैं आपकी कैसे मदद कर सकती हूँ?',
-  // },
-  // pa: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Punjabi (ਪੰਜਾਬੀ), regardless of what language the user speaks.',
-  //   greeting: 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਤੁਸੀਂ contact center ਦੀ ਗਾਹਕ ਸੇਵਾ ਨਾਲ ਜੁੜੇ ਹੋ। ਮੈਂ Maya ਹਾਂ। ਅੱਜ ਮੈਂ ਤੁਹਾਡੀ ਕਿਵੇਂ ਮਦਦ ਕਰ ਸਕਦੀ ਹਾਂ?',
-  // },
-  // bn: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Bengali (বাংলা), regardless of what language the user speaks.',
-  //   greeting: 'নমস্কার! আপনি contact center গ্রাহক সেবায় যোগাযোগ করেছেন। আমি Maya। আজ আপনাকে কীভাবে সাহায্য করতে পারি?',
-  // },
-  // te: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Telugu (తెలుగు), regardless of what language the user speaks.',
-  //   greeting: 'నమస్కారం! మీరు contact center కస్టమర్ సపోర్ట్‌కు చేరుకున్నారు. నేను Maya. ఈరోజు మీకు ఎలా సహాయం చేయగలను?',
-  // },
-  // mr: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Marathi (मराठी), regardless of what language the user speaks.',
-  //   greeting: 'नमस्कार! तुम्ही contact center च्या ग्राहक सेवेशी जोडले गेले आहात. मी Maya आहे. आज मी तुम्हाला कशी मदद करू शकते?',
-  // },
-  // kn: {
-  //   voiceId: 'English_captivating_female1',
-  //   instruction: 'Always respond in Kannada (ಕನ್ನಡ), regardless of what language the user speaks.',
-  //   greeting: 'ನಮಸ್ಕಾರ! ನೀವು contact center ಗ್ರಾಹಕ ಸೇವೆಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಾನು Maya. ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?',
-  // },
+  'sg-en': {
+    voiceId: 'English_captivating_female1',
+    instruction:
+      'Always respond in Singlish (Singaporean English creole). Use characteristic Singlish features: sentence-final particles like "lah", "leh", "lor", "meh", "sia", "can?"; direct grammar influenced by Malay and Hokkien; and a casual, friendly tone.',
+    greeting:
+      "Hey there lah! You've reached voice support. I'm Maya. How can I help you today?",
+  },
+  hi: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Hindi (हिन्दी), regardless of what language the user speaks.',
+    greeting:
+      'नमस्ते, कॉल के लिए धन्यवाद। आप वॉइस सपोर्ट से जुड़े हैं — मैं Maya हूँ। आज मैं आपकी कैसे मदद कर सकती हूँ?',
+  },
+  pa: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Punjabi (ਪੰਜਾਬੀ), regardless of what language the user speaks.',
+    greeting:
+      'ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਕਾਲ ਲਈ ਧੰਨਵਾਦ। ਤੁਸੀਂ ਵੌਇਸ ਸਪੋਰਟ ਨਾਲ ਜੁੜੇ ਹੋ — ਮੈਂ Maya ਹਾਂ। ਅੱਜ ਮੈਂ ਤੁਹਾਡੀ ਕਿਵੇਂ ਮਦਦ ਕਰ ਸਕਦੀ ਹਾਂ?',
+  },
+  bn: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Bengali (বাংলা), regardless of what language the user speaks.',
+    greeting:
+      'নমস্কার! কল করার জন্য ধন্যবাদ। আপনি ভয়েস সাপোর্টে যুক্ত — আমি Maya। আজ আপনাকে কীভাবে সাহায্য করতে পারি?',
+  },
+  te: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Telugu (తెలుగు), regardless of what language the user speaks.',
+    greeting:
+      'నమస్కారం! కాల్ చేసినందుకు ధన్యవాదాలు. మీరు వాయిస్ సపోర్ట్‌కు కనెక్ట్ అయ్యారు — నేను Maya. ఈరోజు మీకు ఎలా సహాయం చేయగలను?',
+  },
+  mr: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Marathi (मराठी), regardless of what language the user speaks.',
+    greeting:
+      'नमस्कार! कॉलसाठी धन्यवाद. तुम्ही व्हॉइस सपोर्टशी कनेक्ट आहात — मी Maya आहे. आज मी तुम्हाला कशी मदत करू शकते?',
+  },
+  kn: {
+    voiceId: 'English_captivating_female1',
+    instruction: 'Always respond in Kannada (ಕನ್ನಡ), regardless of what language the user speaks.',
+    greeting:
+      'ನಮಸ್ಕಾರ! ಕರೆ ಮಾಡಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದಗಳು. ನೀವು ವಾಯ್ಸ್ ಸಪೋರ್ಟ್‌ಗೆ ಸಂಪರ್ಕಗೊಂಡಿದ್ದೀರಿ — ನಾನು Maya. ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?',
+  },
 };
 
 function requireEnv(name: string): string {
@@ -225,19 +235,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-// Valsea language name strings as expected by the valsea-rtt model.
-const VALSEA_ASR_LANGUAGE: Record<string, string> = {
-  en: 'english',
-  vi: 'vietnamese',
-  id: 'indonesian',
-  ms: 'malay',
-  th: 'thai',
-  tl: 'filipino',
-  ta: 'tamil',
-  km: 'khmer',
-};
-
-// Valsea STT — used for all active languages (all of which are Valsea-supported).
+// Valsea STT — used when queue language has a Valsea ASR mapping; otherwise Ares STT.
 class ValseaSTT extends BaseSTT {
   constructor(private language: string) { super(); }
   toConfig() {
@@ -352,16 +350,15 @@ export async function POST(request: NextRequest) {
     const tts = buildTTS(lang.voiceId, ttsProvider);
 
     // STT selection:
-    // - Language switching ON  → Agora AresSTT (built-in multilingual, no key required).
-    //   The user may speak any language mid-call and the LLM will detect and match it.
-    // - Language switching OFF → Valsea STT locked to the selected language for maximum
-    //   single-language accuracy.
+    // - Language switching ON → AresSTT (multilingual).
+    // - Language switching OFF + Valsea ASR map → Valsea STT (best accent accuracy).
+    // - Language switching OFF + no Valsea map → AresSTT (zh, ja, hi, etc.).
     let stt: BaseSTT;
     if (allowLanguageSwitching) {
       stt = new AresSTT();
     } else {
-      const valseaLang = VALSEA_ASR_LANGUAGE[languageCode] ?? VALSEA_ASR_LANGUAGE['vi'];
-      stt = new ValseaSTT(valseaLang);
+      const valseaLang = VALSEA_ASR_LANGUAGE[languageCode];
+      stt = valseaLang ? new ValseaSTT(valseaLang) : new AresSTT();
     }
 
     // LLM instruction adapts to the switching mode.

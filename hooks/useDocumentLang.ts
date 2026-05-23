@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 function toHtmlLang(code: string): string {
   if (code === 'yue') return 'zh-HK';
   if (code === 'zh') return 'zh';
+  if (code === 'sg-en') return 'en-SG';
   return code.split('-')[0] || 'en';
 }
 

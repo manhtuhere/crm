@@ -6,20 +6,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { getUiCopy } from '@/lib/ui-copy';
 
-type CallPhase = 'idle' | 'ringing' | 'countdown' | 'connected';
+type CallPhase = 'idle' | 'ringing' | 'connected';
 
 type SessionConnectingOverlayProps = {
   visible: boolean;
-  /** When true, plays 3 → 2 → 1 → Call connected, then calls onFinished */
+  /** When true, shows call connected then calls onFinished */
   signalReady?: boolean;
   onFinished?: () => void;
-  /** Queue language — localizes overlay copy */
   lang?: string;
 };
 
-const COUNTDOWN_MS = 720;
-const CONNECTED_MS = 900;
-const MIN_RING_MS = 550;
+const CONNECTED_MS = 800;
+const MIN_RING_MS = 400;
 
 export function SessionConnectingOverlay({
   visible,
@@ -30,7 +28,6 @@ export function SessionConnectingOverlay({
   const reduced = usePrefersReducedMotion();
   const c = getUiCopy(lang).callOverlay;
   const [phase, setPhase] = useState<CallPhase>('idle');
-  const [count, setCount] = useState(3);
   const finishedRef = useRef(false);
   const onFinishedRef = useRef(onFinished);
   onFinishedRef.current = onFinished;
@@ -44,13 +41,11 @@ export function SessionConnectingOverlay({
   useEffect(() => {
     if (!visible) {
       setPhase('idle');
-      setCount(3);
       finishedRef.current = false;
       return;
     }
     finishedRef.current = false;
     setPhase('ringing');
-    setCount(3);
   }, [visible]);
 
   useEffect(() => {
@@ -64,25 +59,9 @@ export function SessionConnectingOverlay({
 
     if (phase !== 'ringing') return;
 
-    const ringDelay = window.setTimeout(() => {
-      setPhase('countdown');
-      setCount(3);
-    }, MIN_RING_MS);
-
-    return () => clearTimeout(ringDelay);
-  }, [visible, signalReady, phase, reduced, finishSequence]);
-
-  useEffect(() => {
-    if (phase !== 'countdown') return;
-
-    if (count > 1) {
-      const t = window.setTimeout(() => setCount((c) => c - 1), COUNTDOWN_MS);
-      return () => clearTimeout(t);
-    }
-
-    const t = window.setTimeout(() => setPhase('connected'), COUNTDOWN_MS);
+    const t = window.setTimeout(() => setPhase('connected'), MIN_RING_MS);
     return () => clearTimeout(t);
-  }, [phase, count]);
+  }, [visible, signalReady, phase, reduced, finishSequence]);
 
   useEffect(() => {
     if (phase !== 'connected') return;
@@ -92,13 +71,6 @@ export function SessionConnectingOverlay({
 
   if (!visible || phase === 'idle') return null;
 
-  const statusLabel =
-    phase === 'ringing'
-      ? c.placing
-      : phase === 'countdown'
-        ? c.connecting
-        : c.connected;
-
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-xl animate-fade-up"
@@ -107,7 +79,6 @@ export function SessionConnectingOverlay({
       aria-live="polite"
     >
       <div className="relative mx-6 flex w-full max-w-xs flex-col items-center gap-8 text-center">
-        {/* Ringing pulses */}
         <div className="relative flex h-28 w-28 items-center justify-center">
           {phase === 'ringing' && (
             <>
@@ -144,42 +115,24 @@ export function SessionConnectingOverlay({
           </div>
         </div>
 
-        {/* Countdown or status copy */}
-        <div className="space-y-2 min-h-[5.5rem] flex flex-col items-center justify-center">
-          {phase === 'countdown' ? (
-            <p
-              key={count}
-              className="vs-call-count font-display text-7xl font-bold tabular-nums text-white vs-call-count-pop"
-              aria-live="assertive"
-            >
-              {count}
-            </p>
-          ) : phase === 'connected' ? (
+        <div className="space-y-2 min-h-[4rem] flex flex-col items-center justify-center">
+          {phase === 'connected' ? (
             <p className="vs-heading text-2xl font-semibold text-emerald-300 vs-call-count-pop">
               {c.connected}
             </p>
           ) : (
-            <p className="vs-heading text-xl font-semibold text-white">
-              {statusLabel}
-            </p>
+            <p className="vs-heading text-xl font-semibold text-white">{c.placing}</p>
           )}
 
           <p className="text-sm text-white/55 flex items-center justify-center gap-2">
             {phase === 'ringing' && (
               <Phone className="h-3.5 w-3.5 animate-pulse opacity-70" aria-hidden />
             )}
-            <span>
-              {phase === 'ringing'
-                ? c.queueHint
-                : phase === 'countdown'
-                  ? c.linkHint
-                  : c.onLineHint}
-            </span>
+            <span>{phase === 'ringing' ? c.queueHint : c.onLineHint}</span>
           </p>
         </div>
 
-        {/* Subtle audio-wave bars while ringing / countdown */}
-        {(phase === 'ringing' || phase === 'countdown') && (
+        {phase === 'ringing' && (
           <div
             className="flex items-end justify-center gap-1 h-8"
             aria-hidden

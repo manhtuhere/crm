@@ -1,6 +1,6 @@
 const CALL_INTRO_KEY = 'valsea-call-intro-at';
 
-/** Set after landing 3-2-1 sequence so in-call UI does not repeat it. */
+/** Set after landing connect overlay so in-call UI does not repeat it. */
 export function markCallIntroCompleted(): void {
   try {
     sessionStorage.setItem(CALL_INTRO_KEY, String(Date.now()));

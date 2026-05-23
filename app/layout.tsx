@@ -29,17 +29,17 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: 'BPO Voice Call Demo — VALSEA',
+  title: 'Voice Call — VALSEA',
   description:
-    'Contact-center voice call demo for BPO operations (Concentrix, TDCX, and similar). Live translation-ready agent with accent-aware ASR in English, Vietnamese, Indonesian, Thai, and more.',
+    'Live voice call demo with translation-ready AI agent and accent-aware ASR in English, Vietnamese, Indonesian, Thai, and more.',
   icons: {
     icon: '/valsea-logo.png',
     apple: '/valsea-logo.png',
   },
   openGraph: {
-    title: 'BPO Voice Call Demo — VALSEA',
+    title: 'Voice Call — VALSEA',
     description:
-      'Multilingual inbound voice support for offshore contact centers — powered by VALSEA speech intelligence.',
+      'Multilingual voice call demo powered by VALSEA speech intelligence.',
     images: [{ url: '/valsea-logo.png', width: 512, height: 512, alt: 'VALSEA' }],
   },
 };
