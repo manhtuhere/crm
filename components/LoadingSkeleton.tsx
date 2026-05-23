@@ -1,51 +1,77 @@
 'use client';
 
-const SKELETON_BAR_HEIGHTS = Array.from(
-  { length: 40 },
-  (_, index) => `${20 + ((index * 17) % 60)}%`,
-);
+const BAR_HEIGHTS = [24, 38, 32, 44, 28, 40, 30, 42];
+
+function SideColumnSkeleton({ side }: { side: 'left' | 'right' }) {
+  return (
+    <div
+      className={`hidden lg:flex flex-col w-[400px] xl:w-[450px] shrink-0 border-vs-border ${
+        side === 'left' ? 'border-r' : 'border-l'
+      } bg-vs-overlay/20 p-4 gap-3`}
+    >
+      <div className="h-3 w-28 rounded vs-skeleton-block" />
+      <div className="h-4 w-36 rounded vs-skeleton-block mb-2" />
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="rounded-2xl p-4 border border-vs-border-md bg-vs-surface/60 space-y-3">
+          <div className="h-4 w-24 rounded vs-skeleton-block" />
+          <div className="h-16 rounded-xl vs-skeleton-block" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function LoadingSkeleton() {
   return (
-    <div className="flex flex-col gap-6 p-4 h-full animate-pulse">
-      {/* Mirrors the top-right exit control while the browser-only conversation UI loads. */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
-        <div className="h-9 w-32 bg-muted/50 rounded-md" />
-      </div>
+    <div className="vs-page-shell h-[100dvh] flex flex-col bg-vs-page text-vs-fg">
+      <header className="flex items-center justify-between px-4 md:px-6 py-3 pt-safe border-b border-vs-border-hdr bg-vs-card/60">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl vs-skeleton-block" />
+          <div className="space-y-2">
+            <div className="h-3.5 w-20 rounded vs-skeleton-block" />
+            <div className="h-2.5 w-28 rounded vs-skeleton-block" />
+          </div>
+        </div>
+        <div className="h-9 w-20 rounded-full vs-skeleton-block" />
+      </header>
 
-      {/* Center visualization placeholder so the layout stays stable during lazy load. */}
-      <div className="relative h-56 w-full flex items-center justify-center">
-        <div className="w-full max-w-2xl px-4">
-          <div className="flex items-end justify-center gap-1 h-32">
-            {SKELETON_BAR_HEIGHTS.map((height, i) => (
-              <div
-                key={i}
-                className="w-1 bg-muted/50 rounded-full"
-                style={{ height }}
-              />
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row overflow-hidden">
+        <SideColumnSkeleton side="left" />
+
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 p-6">
+          <div className="w-36 h-36 md:w-48 md:h-48 rounded-full vs-skeleton-block" />
+          <div className="flex items-end gap-1 h-12 px-5 rounded-2xl border border-vs-border-md bg-vs-surface/50">
+            {BAR_HEIGHTS.map((h, i) => (
+              <div key={i} className="w-1 rounded-full vs-skeleton-block" style={{ height: h }} />
             ))}
+          </div>
+          <div className="space-y-2 text-center w-full max-w-xs">
+            <div className="h-5 w-3/4 mx-auto rounded-lg vs-skeleton-block" />
+            <div className="h-3 w-full rounded vs-skeleton-block" />
+          </div>
+        </div>
+
+        <SideColumnSkeleton side="right" />
+
+        {/* Mobile: tab + single column placeholder */}
+        <div className="lg:hidden flex flex-col flex-1 min-h-0 border-t border-vs-border-hdr">
+          <div className="flex gap-1 p-1 shrink-0">
+            <div className="flex-1 h-10 rounded-lg vs-skeleton-block" />
+            <div className="flex-1 h-10 rounded-lg vs-skeleton-block opacity-60" />
+          </div>
+          <div className="flex-1 p-4 space-y-4">
+            <div className="h-4 w-24 rounded vs-skeleton-block" />
+            <div className="h-20 rounded-2xl vs-skeleton-block" />
+            <div className="h-14 rounded-2xl vs-skeleton-block ml-auto w-[75%]" />
           </div>
         </div>
       </div>
 
-      {/* Small status line placeholder beneath the visualizer. */}
-      <div className="text-center h-4">
-        <div className="h-3 w-24 bg-muted/50 rounded mx-auto" />
-      </div>
-
-      {/* Bottom control dock placeholder for mute and device controls. */}
-      <div className="fixed bottom-14 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-card/80 border border-border rounded-full px-4 py-2">
-        <div className="w-2 h-2 bg-muted/50 rounded-full" />
-        <div className="w-12 h-12 bg-muted/50 rounded-full" />
-        <div className="w-10 h-10 bg-muted/50 rounded-full" />
-      </div>
-
-      {/* Transcript panel placeholder in the same anchored position as the live chat stream. */}
-      <div className="fixed bottom-32 right-4 w-80 bg-card/80 backdrop-blur-md rounded-lg border border-border p-4">
-        <div className="space-y-3">
-          <div className="h-4 w-3/4 bg-muted/50 rounded" />
-          <div className="h-4 w-1/2 bg-muted/50 rounded" />
-          <div className="h-4 w-5/6 bg-muted/50 rounded" />
+      <div className="shrink-0 px-4 pb-safe pt-2 border-t border-vs-border-hdr">
+        <div className="max-w-lg mx-auto flex justify-center gap-4 p-2.5 rounded-2xl border border-vs-border-md bg-vs-surface/80">
+          <div className="w-12 h-12 rounded-full vs-skeleton-block" />
+          <div className="h-11 w-32 rounded-full vs-skeleton-block" />
+          <div className="w-12 h-12 rounded-full vs-skeleton-block" />
         </div>
       </div>
     </div>

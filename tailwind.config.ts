@@ -12,7 +12,14 @@ const config: Config = {
   theme: {
   	extend: {
       fontFamily: {
-        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-body)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        'vs-sm': 'var(--vs-shadow-sm)',
+        'vs-md': 'var(--vs-shadow-md)',
+        'vs-lg': 'var(--vs-shadow-lg)',
+        'vs-glow': 'var(--vs-shadow-glow)',
       },
   		colors: {
         // ── Valsea brand tokens (values defined in globals.css :root / .dark) ──
@@ -109,26 +116,41 @@ const config: Config = {
   		},
   		keyframes: {
   			'accordion-down': {
-  				from: {
-  					height: '0'
-  				},
-  				to: {
-  					height: 'var(--radix-accordion-content-height)'
-  				}
+  				from: { height: '0' },
+  				to: { height: 'var(--radix-accordion-content-height)' },
   			},
   			'accordion-up': {
-  				from: {
-  					height: 'var(--radix-accordion-content-height)'
-  				},
-  				to: {
-  					height: '0'
-  				}
-  			}
+  				from: { height: 'var(--radix-accordion-content-height)' },
+  				to: { height: '0' },
+  			},
+  			'vs-shimmer': {
+  				'0%': { backgroundPosition: '-200% 0' },
+  				'100%': { backgroundPosition: '200% 0' },
+  			},
+  			'vs-breathe': {
+  				'0%, 100%': { opacity: '0.55', transform: 'scale(1)' },
+  				'50%': { opacity: '1', transform: 'scale(1.05)' },
+  			},
+  			'vs-float': {
+  				'0%, 100%': { transform: 'translateY(0)' },
+  				'50%': { transform: 'translateY(-6px)' },
+  			},
+  			'vs-glow-pulse': {
+  				'0%, 100%': { opacity: '0.45' },
+  				'50%': { opacity: '0.85' },
+  			},
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
-  		}
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'vs-shimmer': 'vs-shimmer 2.2s ease-in-out infinite',
+  			'vs-breathe': 'vs-breathe 2.4s ease-in-out infinite',
+  			'vs-float': 'vs-float 5s ease-in-out infinite',
+  			'vs-glow-pulse': 'vs-glow-pulse 3s ease-in-out infinite',
+  		},
+  		transitionTimingFunction: {
+  			'vs-out': 'cubic-bezier(0.16, 1, 0.3, 1)',
+  		},
   	}
   },
   plugins: [require("tailwindcss-animate")],
