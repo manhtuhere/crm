@@ -7,9 +7,13 @@ const STORAGE_KEY = 'valsea-onboarding-dismissed';
 
 type OnboardingTipProps = {
   message: string;
+  dismissLabel?: string;
 };
 
-export function OnboardingTip({ message }: OnboardingTipProps) {
+export function OnboardingTip({
+  message,
+  dismissLabel = 'Dismiss tip',
+}: OnboardingTipProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -39,7 +43,7 @@ export function OnboardingTip({ message }: OnboardingTipProps) {
         type="button"
         onClick={dismiss}
         className="shrink-0 p-1 rounded-md text-vs-fg-dim hover:text-vs-fg hover:bg-vs-surface transition-colors"
-        aria-label="Dismiss tip"
+        aria-label={dismissLabel}
       >
         <X className="w-3.5 h-3.5" />
       </button>

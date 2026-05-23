@@ -1,7 +1,7 @@
 "use client";
 
 import type { RTMClient } from "agora-rtm";
-import { Loader2, Sun, Moon } from "lucide-react";
+import { Headphones, Loader2, Sun, Moon } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -17,6 +17,8 @@ import { SessionConnectingOverlay } from "./SessionConnectingOverlay";
 import { useDocumentLang } from "@/hooks/useDocumentLang";
 import { useTheme } from "@/hooks/useTheme";
 import { LoadingSkeleton } from "./LoadingSkeleton";
+import { markCallIntroCompleted } from "@/lib/call-intro";
+import { getUiCopy, LANGUAGE_OPTIONS } from "@/lib/ui-copy";
 
 const ConversationComponent = dynamic(() => import("./ConversationComponent"), {
   ssr: false,
@@ -52,12 +54,6 @@ const AgoraProvider = dynamic(
   { ssr: false },
 );
 
-// Valsea-ASR-supported languages
-const LANGUAGE_OPTIONS = [
-  { label: "English", code: "en" },
-  { label: "Vietnamese (Tiếng Việt)", code: "vi" },
-] as const;
-
 const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;
 
 export default function LandingPage() {
@@ -73,8 +69,10 @@ export default function LandingPage() {
   const { isDark, toggle: toggleTheme } = useTheme();
 
   useDocumentLang(selectedLanguage);
+  const t = getUiCopy(selectedLanguage);
 
   const handleConnectSequenceFinished = useCallback(() => {
+    markCallIntroCompleted();
     setIsLoading(false);
     setConnectSignalReady(false);
     setShowConversation(true);
@@ -205,7 +203,7 @@ export default function LandingPage() {
       setAgoraData({ ...responseData, agentId: agentData.agent_id });
       setConnectSignalReady(true);
     } catch (err) {
-      setError("Failed to start conversation. Please try again.");
+      setError(t.landing.startError);
       console.error("Error starting conversation:", err);
       setIsLoading(false);
       setConnectSignalReady(false);
@@ -222,14 +220,6 @@ export default function LandingPage() {
   if (showConversation && agoraData && rtmClient) {
     return (
       <div className="relative">
-        {agentJoinError && (
-          <div
-            role="alert"
-            className="absolute top-14 left-4 right-4 z-50 mx-auto max-w-lg text-xs text-center py-2.5 px-4 rounded-xl border border-amber-500/30 text-amber-100 bg-amber-950/90 backdrop-blur-md shadow-vs-md animate-fade-up"
-          >
-            Agent connection failed — conversation may not work as expected.
-          </div>
-        )}
         <Suspense fallback={<LoadingSkeleton />}>
           <ErrorBoundary>
             <AgoraProvider>
@@ -240,6 +230,7 @@ export default function LandingPage() {
                 onEndConversation={handleEndConversation}
                 selectedLanguage={selectedLanguage}
                 allowLanguageSwitching={allowLanguageSwitching}
+                agentJoinWarning={agentJoinError}
                 onChangeLanguage={
                   allowLanguageSwitching ? handleChangeLanguage : undefined
                 }
@@ -258,6 +249,7 @@ export default function LandingPage() {
         visible={isLoading}
         signalReady={connectSignalReady}
         onFinished={handleConnectSequenceFinished}
+        lang={selectedLanguage}
       />
       <div className="vs-mesh-bg" aria-hidden="true" />
       <div
@@ -269,7 +261,7 @@ export default function LandingPage() {
       <button
         onClick={toggleTheme}
         className="absolute top-safe right-5 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ease-vs-out bg-vs-ctrl-bg border border-vs-border-md text-vs-ctrl-icon shadow-vs-sm hover:shadow-vs-md hover:border-vs-brand/40 hover:scale-[1.02] active:scale-[0.98]"
-        aria-label="Toggle theme"
+        aria-label={t.landing.themeToggle}
       >
         {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
       </button>
@@ -295,14 +287,12 @@ export default function LandingPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <p className="vs-label">Contact center · Voice</p>
+            <p className="vs-label">{t.landing.eyebrow}</p>
             <h1 className="vs-heading text-2xl sm:text-3xl font-semibold text-vs-fg">
-              BPO Voice Call Demo
+              {t.landing.title}
             </h1>
             <p className="text-sm text-vs-fg-muted max-w-sm leading-relaxed">
-              Built for offshore contact centers — Concentrix, TDCX, and similar
-              operations. Live voice with accent-aware ASR and queue-language
-              translation.
+              {t.landing.subtitle}
             </p>
           </div>
         </div>
@@ -311,36 +301,32 @@ export default function LandingPage() {
           <div className="vs-glass-card vs-panel-reveal relative rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col gap-6" style={{ animationDelay: '100ms' }}>
             <div className="flex items-center gap-3.5">
               <div className="relative shrink-0">
-                <Image
-                  src="/valsea-logo.png"
-                  alt=""
-                  width={44}
-                  height={44}
-                  className="rounded-xl ring-1 ring-vs-border-md shadow-vs-sm"
-                />
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#3B0B94] to-[#7A56AA] flex items-center justify-center shadow-vs-sm">
+                  <Headphones className="w-5 h-5 text-white" aria-hidden />
+                </div>
                 <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-vs-card" />
               </div>
               <div className="min-w-0">
                 <p className="vs-heading text-base font-semibold leading-tight">
-                  Voice call assistant
+                  {t.landing.cardTitle}
                 </p>
-                <p className="vs-label mt-1">
-                  Inbound support · translation-ready
-                </p>
+                <p className="vs-label mt-1">{t.landing.cardSubtitle}</p>
               </div>
             </div>
 
             <div className="h-px bg-gradient-to-r from-transparent via-vs-divider to-transparent" />
 
-            <OnboardingTip message="Start a voice call, allow your microphone, and speak in any supported language. The agent replies in your selected queue language — ideal for multilingual BPO floors." />
+            <OnboardingTip
+              message={t.landing.onboarding}
+              dismissLabel={t.common.dismissTip}
+            />
 
             <div className="flex flex-col gap-2.5">
               <label htmlFor="language-select" className="vs-label">
-                Call language &amp; translation
+                {t.landing.langLabel}
               </label>
               <p className="text-xs text-vs-fg-dim -mt-1 leading-relaxed">
-                Agent responses and greetings match this queue language (EN, VI,
-                ID, TH, and more).
+                {t.landing.langHint}
               </p>
               <select
                 id="language-select"
@@ -371,16 +357,16 @@ export default function LandingPage() {
                   : undefined
               }
               aria-label={
-                isLoading ? 'Starting voice call' : 'Start voice call'
+                isLoading ? t.landing.connectingCall : t.landing.startCall
               }
             >
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Connecting call…
+                  {t.landing.connectingCall}
                 </>
               ) : (
-                'Start voice call'
+                t.landing.startCall
               )}
             </button>
 
@@ -396,8 +382,7 @@ export default function LandingPage() {
         </div>
 
         <p className="text-xs text-vs-fg-dim text-center tracking-wide animate-fade-up animate-fade-up-d2 max-w-sm leading-relaxed">
-          VALSEA — speech intelligence for multilingual contact-center voice
-          queues.
+          {t.landing.footer}
         </p>
       </div>
     </div>

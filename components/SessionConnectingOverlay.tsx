@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { Phone, PhoneCall } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
+import { getUiCopy } from '@/lib/ui-copy';
 
 type CallPhase = 'idle' | 'ringing' | 'countdown' | 'connected';
 
@@ -12,6 +13,8 @@ type SessionConnectingOverlayProps = {
   /** When true, plays 3 → 2 → 1 → Call connected, then calls onFinished */
   signalReady?: boolean;
   onFinished?: () => void;
+  /** Queue language — localizes overlay copy */
+  lang?: string;
 };
 
 const COUNTDOWN_MS = 720;
@@ -22,8 +25,10 @@ export function SessionConnectingOverlay({
   visible,
   signalReady = false,
   onFinished,
+  lang = 'en',
 }: SessionConnectingOverlayProps) {
   const reduced = usePrefersReducedMotion();
+  const c = getUiCopy(lang).callOverlay;
   const [phase, setPhase] = useState<CallPhase>('idle');
   const [count, setCount] = useState(3);
   const finishedRef = useRef(false);
@@ -89,10 +94,10 @@ export function SessionConnectingOverlay({
 
   const statusLabel =
     phase === 'ringing'
-      ? 'Placing your call…'
+      ? c.placing
       : phase === 'countdown'
-        ? 'Connecting'
-        : 'Call connected';
+        ? c.connecting
+        : c.connected;
 
   return (
     <div
@@ -151,7 +156,7 @@ export function SessionConnectingOverlay({
             </p>
           ) : phase === 'connected' ? (
             <p className="vs-heading text-2xl font-semibold text-emerald-300 vs-call-count-pop">
-              Call connected
+              {c.connected}
             </p>
           ) : (
             <p className="vs-heading text-xl font-semibold text-white">
@@ -165,10 +170,10 @@ export function SessionConnectingOverlay({
             )}
             <span>
               {phase === 'ringing'
-                ? 'Contact center queue · please wait'
+                ? c.queueHint
                 : phase === 'countdown'
-                  ? 'Establishing secure voice link'
-                  : 'Agent on the line'}
+                  ? c.linkHint
+                  : c.onLineHint}
             </span>
           </p>
         </div>

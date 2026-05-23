@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BarChart2, Waves, ShieldCheck, Lightbulb } from 'lucide-react';
 import { AnimatedPercent } from './AnimatedPercent';
 import { RevealBadge } from './RevealBadge';
+import { getUiCopy } from '@/lib/ui-copy';
 
 export type ProsodyData = {
   frustration: number;
@@ -47,6 +48,7 @@ interface AnalysisPanelProps {
   isSentimentUnavailable?: boolean;
   isVoiceSecurityUnavailable?: boolean;
   isIntentUnavailable?: boolean;
+  lang?: string;
 }
 
 const PROSODY_METRICS: { key: keyof ProsodyData; color: string }[] = [
@@ -61,12 +63,6 @@ const SENTIMENT_CLASS: Record<string, string> = {
   positive: 'vs-sentiment-positive',
   neutral: 'vs-sentiment-neutral',
   negative: 'vs-sentiment-negative',
-};
-
-const LIVENESS_STYLE: Record<string, { badge: string; label: string }> = {
-  verified: { badge: 'vs-sentiment-positive', label: 'Verified Human' },
-  scanning: { badge: 'vs-sentiment-neutral', label: 'Scanning…' },
-  failed:   { badge: 'vs-sentiment-negative', label: 'Synthetic Suspect' },
 };
 
 function PanelShell({
@@ -168,7 +164,20 @@ export function AnalysisPanel({
   isSentimentUnavailable,
   isVoiceSecurityUnavailable,
   isIntentUnavailable,
+  lang = 'en',
 }: AnalysisPanelProps) {
+  const a = getUiCopy(lang).analysis;
+  const livenessStyle: Record<string, { badge: string; label: string }> = {
+    verified: { badge: 'vs-sentiment-positive', label: a.livenessVerified },
+    scanning: { badge: 'vs-sentiment-neutral', label: a.livenessScanning },
+    failed: { badge: 'vs-sentiment-negative', label: a.livenessFailed },
+  };
+  const sentimentLabels: Record<string, string> = {
+    positive: a.sentimentPositive,
+    neutral: a.sentimentNeutral,
+    negative: a.sentimentNegative,
+  };
+
   const sentimentPulseRef = useRef(false);
   const intentPulseRef = useRef(false);
   const prosodyPulseRef = useRef(false);
@@ -218,15 +227,15 @@ export function AnalysisPanel({
   return (
     <div className="flex flex-col gap-3 w-full">
       <PanelShell
-        title="Sentiment"
+        title={a.sentiment}
         icon={<BarChart2 className="w-4 h-4" />}
         revealIndex={0}
         insightPulse={sentimentPulse}
       >
         {isSentimentUnavailable ? (
-          <EmptyState label="Credits required to enable" />
+          <EmptyState label={a.creditsRequired} />
         ) : isSentimentLoading && !sentiment ? (
-          <EmptyState label="Analyzing…" loading />
+          <EmptyState label={a.analyzing} loading />
         ) : sentiment ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
@@ -234,10 +243,10 @@ export function AnalysisPanel({
                 revealKey={sentiment.sentiment}
                 className={`text-xs font-bold uppercase px-3 py-1 rounded-full border ${SENTIMENT_CLASS[sentiment.sentiment] ?? ''}`}
               >
-                {sentiment.sentiment}
+                {sentimentLabels[sentiment.sentiment] ?? sentiment.sentiment}
               </RevealBadge>
               <div className="flex flex-col">
-                <MetricLabel>Confidence</MetricLabel>
+                <MetricLabel>{a.confidence}</MetricLabel>
                 <AnimatedPercent
                   value={sentiment.confidence}
                   className="text-sm font-semibold text-vs-fg"
@@ -264,25 +273,25 @@ export function AnalysisPanel({
             )}
           </div>
         ) : (
-          <EmptyState label="Waiting for speech…" />
+          <EmptyState label={a.waitingSpeech} />
         )}
       </PanelShell>
 
       <PanelShell
-        title="Prosody"
+        title={a.prosody}
         icon={<Waves className="w-4 h-4" />}
         revealIndex={1}
         insightPulse={prosodyPulse}
       >
         {isProsodyUnavailable ? (
-          <EmptyState label="Credits required to enable" />
+          <EmptyState label={a.creditsRequired} />
         ) : isProsodyLoading && !prosody ? (
-          <EmptyState label="Analyzing audio…" loading />
+          <EmptyState label={a.analyzingAudio} loading />
         ) : prosody ? (
           <div className="flex flex-col gap-2.5">
             {PROSODY_METRICS.map(({ key, color }, i) => (
               <div key={key} className="flex items-center gap-3">
-                <MetricLabel>{key}</MetricLabel>
+                <MetricLabel>{a.prosodyMetrics[key]}</MetricLabel>
                 <ScoreBar
                   value={prosody[key]}
                   color={color}
@@ -293,31 +302,31 @@ export function AnalysisPanel({
             ))}
           </div>
         ) : (
-          <EmptyState label="Waiting for speech…" />
+          <EmptyState label={a.waitingSpeech} />
         )}
       </PanelShell>
 
       <PanelShell
-        title="Voice Security"
+        title={a.voiceSecurity}
         icon={<ShieldCheck className="w-4 h-4" />}
         revealIndex={2}
         insightPulse={securityPulse}
       >
         {isVoiceSecurityUnavailable ? (
-          <EmptyState label="Credits required to enable" />
+          <EmptyState label={a.creditsRequired} />
         ) : isVoiceSecurityLoading && !voiceSecurity ? (
-          <EmptyState label="Analyzing audio…" loading />
+          <EmptyState label={a.analyzingAudio} loading />
         ) : voiceSecurity ? (
           <div className="flex flex-col gap-3">
             <RevealBadge
               revealKey={voiceSecurity.liveness_status}
-              className={`text-xs font-bold uppercase px-3 py-1 rounded-full border ${LIVENESS_STYLE[voiceSecurity.liveness_status]?.badge ?? ''}`}
+              className={`text-xs font-bold uppercase px-3 py-1 rounded-full border ${livenessStyle[voiceSecurity.liveness_status]?.badge ?? ''}`}
             >
-              {LIVENESS_STYLE[voiceSecurity.liveness_status]?.label ?? voiceSecurity.liveness_status}
+              {livenessStyle[voiceSecurity.liveness_status]?.label ?? voiceSecurity.liveness_status}
             </RevealBadge>
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center gap-3">
-                <MetricLabel>Synthetic</MetricLabel>
+                <MetricLabel>{a.synthetic}</MetricLabel>
                 <ScoreBar
                   value={voiceSecurity.synthetic_probability}
                   color={
@@ -331,7 +340,7 @@ export function AnalysisPanel({
                 />
               </div>
               <div className="flex items-center gap-3">
-                <MetricLabel>Risk</MetricLabel>
+                <MetricLabel>{a.risk}</MetricLabel>
                 <ScoreBar
                   value={voiceSecurity.behavioral_risk}
                   color={
@@ -348,20 +357,20 @@ export function AnalysisPanel({
             </div>
           </div>
         ) : (
-          <EmptyState label="Waiting for audio…" />
+          <EmptyState label={a.waitingAudio} />
         )}
       </PanelShell>
 
       <PanelShell
-        title="Intent"
+        title={a.intent}
         icon={<Lightbulb className="w-4 h-4" />}
         revealIndex={3}
         insightPulse={intentPulse}
       >
         {isIntentUnavailable ? (
-          <EmptyState label="LLM not configured" />
+          <EmptyState label={a.llmNotConfigured} />
         ) : isIntentLoading && !intent ? (
-          <EmptyState label="Classifying…" loading />
+          <EmptyState label={a.classifying} loading />
         ) : intent ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
@@ -372,7 +381,7 @@ export function AnalysisPanel({
                 {intent.intent.replace(/_/g, ' ')}
               </RevealBadge>
               <div className="flex flex-col">
-                <MetricLabel>Confidence</MetricLabel>
+                <MetricLabel>{a.confidence}</MetricLabel>
                 <AnimatedPercent
                   value={intent.confidence}
                   className="text-sm font-semibold text-vs-fg"
@@ -412,7 +421,7 @@ export function AnalysisPanel({
             )}
           </div>
         ) : (
-          <EmptyState label="Waiting for speech…" />
+          <EmptyState label={a.waitingSpeech} />
         )}
       </PanelShell>
     </div>

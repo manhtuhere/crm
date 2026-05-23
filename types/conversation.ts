@@ -47,4 +47,6 @@ export interface ConversationComponentProps {
   ttsProvider?: string;
   allowLanguageSwitching?: boolean;
   onChangeLanguage?: (newLang: string) => Promise<void>;
+  /** Set when invite-agent succeeded but agent may not join RTC */
+  agentJoinWarning?: boolean;
 }

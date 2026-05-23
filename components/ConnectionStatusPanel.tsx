@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ConversationErrorCard, type ConnectionIssue } from './ConversationErrorCard';
+import { formatIssueCount, getUiCopy, type UiCopy } from '@/lib/ui-copy';
 
 type ConnectionStatusPanelProps = {
   connectionState: string;
@@ -11,20 +12,22 @@ type ConnectionStatusPanelProps = {
   connectionIssues: ConnectionIssue[];
   isOpen: boolean;
   onToggle: () => void;
+  lang?: string;
 };
 
 function getConnectionLabel(
   connectionState: string,
   connectionSeverity: 'normal' | 'warning' | 'error',
+  c: UiCopy['connection'],
 ): string {
   if (connectionSeverity !== 'normal' && connectionState === 'CONNECTED') {
-    return 'Connected (issues detected)';
+    return c.connectedWithIssues;
   }
-  if (connectionState === 'CONNECTED') return 'Connected';
-  if (connectionState === 'CONNECTING') return 'Connecting...';
-  if (connectionState === 'RECONNECTING') return 'Reconnecting...';
-  if (connectionState === 'DISCONNECTING') return 'Disconnecting...';
-  return 'Disconnected';
+  if (connectionState === 'CONNECTED') return c.connected;
+  if (connectionState === 'CONNECTING') return c.connecting;
+  if (connectionState === 'RECONNECTING') return c.reconnecting;
+  if (connectionState === 'DISCONNECTING') return c.disconnecting;
+  return c.disconnected;
 }
 
 const SEVERITY_DOT: Record<ConnectionStatusPanelProps['connectionSeverity'], string> = {
@@ -37,50 +40,51 @@ function getStatusLabel(
   connectionState: string,
   connectionSeverity: ConnectionStatusPanelProps['connectionSeverity'],
   issueCount: number,
+  c: UiCopy['connection'],
 ): string {
   if (connectionSeverity === 'error' || connectionState === 'DISCONNECTED') {
-    return connectionState === 'RECONNECTING' ? 'Reconnecting' : 'Offline';
+    return connectionState === 'RECONNECTING' ? c.reconnectingShort : c.offline;
   }
   if (connectionSeverity === 'warning' || issueCount > 0) {
-    return issueCount > 0 ? `${issueCount} issue${issueCount === 1 ? '' : 's'}` : 'Degraded';
+    return issueCount > 0 ? formatIssueCount(issueCount, c) : c.degraded;
   }
   if (connectionState === 'CONNECTING' || connectionState === 'RECONNECTING') {
-    return 'Connecting';
+    return c.connecting;
   }
-  return 'Live';
+  return c.live;
 }
 
 function PanelBody({
   connectionState,
   connectionIssues,
   onClose,
+  c,
 }: {
   connectionState: string;
   connectionIssues: ConnectionIssue[];
   onClose: () => void;
+  c: UiCopy['connection'];
 }) {
   return (
     <>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
-          <p className="vs-label">Connection</p>
+          <p className="vs-label">{c.title}</p>
           <p className="text-xs text-vs-fg-dim mt-0.5 tabular-nums">
-            RTC {connectionState.toLowerCase()}
+            {c.rtcPrefix} {connectionState.toLowerCase()}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
           className="vs-touch flex h-8 w-8 items-center justify-center rounded-lg border border-vs-border-md bg-vs-surface text-vs-fg-muted hover:text-vs-fg transition-colors"
-          aria-label="Close connection details"
+          aria-label={c.closeAria}
         >
           <X className="h-4 w-4" />
         </button>
       </div>
       {connectionIssues.length === 0 ? (
-        <p className="text-sm text-vs-fg-muted leading-relaxed">
-          No agent or signaling errors reported.
-        </p>
+        <p className="text-sm text-vs-fg-muted leading-relaxed">{c.noErrors}</p>
       ) : (
         <div className="space-y-2 max-h-[min(50vh,16rem)] overflow-auto vs-scroll-thin pr-1">
           {connectionIssues.map((issue) => (
@@ -98,14 +102,16 @@ export function ConnectionStatusPanel({
   connectionIssues,
   isOpen,
   onToggle,
+  lang = 'en',
 }: ConnectionStatusPanelProps) {
+  const c = getUiCopy(lang).connection;
   const rootRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
   const dot = SEVERITY_DOT[connectionSeverity];
   const ping =
     connectionState !== 'DISCONNECTED' && connectionState !== 'DISCONNECTING';
-  const label = getStatusLabel(connectionState, connectionSeverity, connectionIssues.length);
+  const label = getStatusLabel(connectionState, connectionSeverity, connectionIssues.length, c);
 
   useEffect(() => setMounted(true), []);
 
@@ -130,7 +136,7 @@ export function ConnectionStatusPanel({
             <button
               type="button"
               className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
-              aria-label="Close connection details"
+              aria-label={c.closeAria}
               onClick={onToggle}
             />
             <div
@@ -142,12 +148,13 @@ export function ConnectionStatusPanel({
               onClick={(e) => e.stopPropagation()}
             >
               <span id="connection-details-title" className="sr-only">
-                Connection details
+                {c.detailsTitle}
               </span>
               <PanelBody
                 connectionState={connectionState}
                 connectionIssues={connectionIssues}
                 onClose={onToggle}
+                c={c}
               />
             </div>
           </div>,
@@ -164,7 +171,7 @@ export function ConnectionStatusPanel({
             ? 'bg-vs-brand-acc border-vs-brand text-vs-brand-text'
             : 'bg-vs-brand-acc/80 border-vs-border-md text-vs-brand-text hover:border-vs-brand/50'
         }`}
-        aria-label={getConnectionLabel(connectionState, connectionSeverity)}
+        aria-label={getConnectionLabel(connectionState, connectionSeverity, c)}
         aria-expanded={isOpen}
         aria-controls="connection-details-panel"
         onClick={onToggle}

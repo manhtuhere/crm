@@ -420,11 +420,13 @@ html {
 }
 
 .vs-robot-img {
-  mix-blend-mode: normal;
+  mix-blend-mode: darken;
+  filter: contrast(1.05) saturate(1.02);
 }
 
 .dark .vs-robot-img {
   mix-blend-mode: darken;
+  filter: contrast(1.08);
 }
 
 /* --- Layout & surface utilities --- */

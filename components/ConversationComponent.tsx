@@ -36,6 +36,7 @@ import { MicrophoneSelector } from './MicrophoneSelector';
 import { ConnectionStatusPanel } from './ConnectionStatusPanel';
 import { AnalysisPanelSkeleton } from './AnalysisPanelSkeleton';
 import { SessionConnectingOverlay } from './SessionConnectingOverlay';
+import { SessionStatusBanner, type SessionStatusVariant } from './SessionStatusBanner';
 import { TranscriptMessageSkeleton } from './TranscriptMessageSkeleton';
 import { OnboardingTip } from './OnboardingTip';
 import { useDocumentLang } from '@/hooks/useDocumentLang';
@@ -50,6 +51,8 @@ import {
 import { AnalysisPanel, type ProsodyData, type SentimentData, type VoiceSecurityData } from './AnalysisPanel';
 import type { IntentData } from '@/types/conversation';
 import type { ConversationComponentProps } from '@/types/conversation';
+import { wasCallIntroRecentlyCompleted } from '@/lib/call-intro';
+import { getUiCopy } from '@/lib/ui-copy';
 
 const MAX_CONNECTION_ISSUES = 6;
 
@@ -76,14 +79,6 @@ function isRtmSalStatusPayload(value: unknown): value is RtmSalStatusPayload {
   return !!value && typeof value === 'object' && (value as { object?: unknown }).object === 'message.sal_status';
 }
 
-const AGENT_STATE_LABEL: Record<string, string> = {
-  listening: 'Listening',
-  thinking:  'Thinking',
-  speaking:  'Speaking',
-  idle:      'Ready',
-  silent:    'Ready',
-};
-
 export default function ConversationComponent({
   agoraData,
   rtmClient,
@@ -92,6 +87,7 @@ export default function ConversationComponent({
   selectedLanguage = 'vi',
   allowLanguageSwitching = false,
   onChangeLanguage,
+  agentJoinWarning = false,
 }: ConversationComponentProps) {
   const client      = useRTCClient();
   const remoteUsers = useRemoteUsers();
@@ -126,10 +122,15 @@ export default function ConversationComponent({
   const [mobileTab, setMobileTab] = useState<'transcript' | 'analysis'>('transcript');
   const [connectionPanelOpen, setConnectionPanelOpen] = useState(false);
   const [messageTimestamps, setMessageTimestamps] = useState<Record<string, number>>({});
-  const [showCallOverlay, setShowCallOverlay] = useState(false);
+  const [showCallOverlay, setShowCallOverlay] = useState(
+    () => !wasCallIntroRecentlyCompleted(),
+  );
   const { isDark, toggle: toggleTheme } = useTheme();
   const isMobile = useIsMobile();
   useDocumentLang(selectedLanguage);
+  const t = useMemo(() => getUiCopy(selectedLanguage), [selectedLanguage]);
+  const [micBlocked, setMicBlocked] = useState(false);
+  const [agentWaitLong, setAgentWaitLong] = useState(false);
   const prevUserMsgCountRef = useRef(0);
   const prevIntentMsgCountRef = useRef(0);
   const transcriptEndRef     = useRef<HTMLDivElement>(null);
@@ -298,18 +299,111 @@ export default function ConversationComponent({
   const sessionReady = joinSuccess && isAgentConnected;
 
   useEffect(() => {
-    if (isReady) setShowCallOverlay(true);
-  }, [isReady]);
-
-  useEffect(() => {
-    if (!isReady) setShowCallOverlay(false);
+    if (!isReady) {
+      setShowCallOverlay(false);
+      return;
+    }
+    if (!wasCallIntroRecentlyCompleted()) {
+      setShowCallOverlay(true);
+    }
   }, [isReady]);
 
   useEffect(() => {
     if (!showCallOverlay || sessionReady) return;
-    const t = setTimeout(() => setShowCallOverlay(false), 25_000);
-    return () => clearTimeout(t);
+    const timeout = setTimeout(() => setShowCallOverlay(false), 25_000);
+    return () => clearTimeout(timeout);
   }, [showCallOverlay, sessionReady]);
+
+  useEffect(() => {
+    if (!isReady || !joinSuccess) {
+      setMicBlocked(false);
+      return;
+    }
+    if (localMicrophoneTrack) {
+      setMicBlocked(false);
+      return;
+    }
+    const timeout = setTimeout(() => setMicBlocked(true), 5000);
+    return () => clearTimeout(timeout);
+  }, [isReady, joinSuccess, localMicrophoneTrack]);
+
+  useEffect(() => {
+    if (sessionReady || !joinSuccess) {
+      setAgentWaitLong(false);
+      return;
+    }
+    const timeout = setTimeout(() => setAgentWaitLong(true), 8000);
+    return () => clearTimeout(timeout);
+  }, [sessionReady, joinSuccess]);
+
+  const showStatusBanner =
+    !showCallOverlay &&
+    !sessionReady &&
+    wasCallIntroRecentlyCompleted();
+
+  const statusBanner = useMemo((): {
+    variant: SessionStatusVariant;
+    title: string;
+    detail: string;
+  } | null => {
+    if (!showStatusBanner) return null;
+    if (agentJoinWarning) {
+      return {
+        variant: 'agent-failed',
+        title: t.status.agentFailed,
+        detail: t.status.agentFailedDetail,
+      };
+    }
+    if (micBlocked) {
+      return {
+        variant: 'mic-blocked',
+        title: t.status.micBlocked,
+        detail: t.status.micBlockedDetail,
+      };
+    }
+    if (
+      connectionState === 'RECONNECTING' ||
+      connectionState === 'DISCONNECTED' ||
+      connectionState === 'DISCONNECTING'
+    ) {
+      return {
+        variant: 'network',
+        title: t.status.network,
+        detail: t.status.networkDetail,
+      };
+    }
+    if (!joinSuccess) {
+      return {
+        variant: 'waiting-rtc',
+        title: t.status.waitingRtc,
+        detail: t.status.waitingRtcDetail,
+      };
+    }
+    if (!isAgentConnected && agentWaitLong) {
+      return {
+        variant: 'agent-slow',
+        title: t.status.agentSlow,
+        detail: t.status.agentSlowDetail,
+      };
+    }
+    if (!isAgentConnected) {
+      return {
+        variant: 'connecting-agent',
+        title: t.status.connectingAgent,
+        detail: t.status.connectingAgentDetail,
+      };
+    }
+    return null;
+  }, [
+    showStatusBanner,
+    agentJoinWarning,
+    micBlocked,
+    connectionState,
+    joinSuccess,
+    isAgentConnected,
+    agentWaitLong,
+    t.status,
+  ]);
 
   const connectionSeverity = useMemo<'normal' | 'warning' | 'error'>(() => {
     if (connectionState !== 'CONNECTED') return 'error';
@@ -554,11 +648,11 @@ export default function ConversationComponent({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.repeat) return;
-      if (window.confirm('End this voice session?')) handleEndSession();
+      if (window.confirm(t.conversation.endConfirm)) handleEndSession();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleEndSession]);
+  }, [handleEndSession, t.conversation.endConfirm]);
 
   const handleMicToggle = useCallback(async () => {
     const next = !isEnabled;
@@ -597,11 +691,26 @@ export default function ConversationComponent({
   ];
 
   const centerStateText =
-    agentState === 'listening' ? 'Valsea is listening...' :
-    agentState === 'thinking'  ? 'Valsea is thinking...'  :
-    agentState === 'speaking'  ? 'Valsea is speaking...'  :
-    agentState                 ? 'Valsea is ready'        :
-                                 'Connecting...';
+    agentState === 'listening'
+      ? t.conversation.listening
+      : agentState === 'thinking'
+        ? t.conversation.thinking
+        : agentState === 'speaking'
+          ? t.conversation.speaking
+          : agentState
+            ? t.conversation.ready
+            : t.conversation.connecting;
+
+  const centerStateSub =
+    !sessionReady
+      ? t.conversation.subConnecting
+      : agentState === 'listening'
+        ? t.conversation.subListening
+        : agentState === 'thinking'
+          ? t.conversation.subThinking
+          : agentState === 'speaking'
+            ? t.conversation.subSpeaking
+            : t.conversation.subIdle;
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -610,7 +719,15 @@ export default function ConversationComponent({
         visible={showCallOverlay}
         signalReady={sessionReady}
         onFinished={() => setShowCallOverlay(false)}
+        lang={selectedLanguage}
       />
+      {statusBanner && (
+        <SessionStatusBanner
+          variant={statusBanner.variant}
+          title={statusBanner.title}
+          detail={statusBanner.detail}
+        />
+      )}
       {remoteUsers.map((user) => (
         <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>
       ))}
@@ -626,9 +743,9 @@ export default function ConversationComponent({
             priority
           />
           <div className="min-w-0">
-            <p className="vs-heading text-sm font-semibold leading-none">Voice call</p>
+            <p className="vs-heading text-sm font-semibold leading-none">{t.conversation.title}</p>
             <p className="vs-caption mt-1 truncate lg:hidden">{centerStateText}</p>
-            <p className="vs-caption mt-1 truncate hidden lg:block">Contact center session</p>
+            <p className="vs-caption mt-1 truncate hidden lg:block">{t.conversation.sessionSubtitle}</p>
           </div>
         </div>
 
@@ -639,11 +756,12 @@ export default function ConversationComponent({
             connectionIssues={connectionIssues}
             isOpen={connectionPanelOpen}
             onToggle={() => setConnectionPanelOpen((o) => !o)}
+            lang={selectedLanguage}
           />
           <button
             onClick={toggleTheme}
             className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ease-vs-out border bg-vs-ctrl-bg border-vs-ctrl-border text-vs-ctrl-icon hover:border-vs-brand/40 hover:scale-[1.02] active:scale-[0.98]"
-            aria-label="Toggle theme"
+            aria-label={t.landing.themeToggle}
           >
             {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
@@ -657,12 +775,15 @@ export default function ConversationComponent({
           className={`order-4 lg:order-1 ${mobileTab === 'analysis' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 lg:flex-none lg:w-[400px] xl:w-[450px] shrink-0 overflow-y-auto overflow-hidden lg:border-r border-vs-border bg-vs-overlay/30 vs-scroll-thin`}
         >
           <div className="px-4 pt-4 pb-2 shrink-0 hidden lg:block">
-            <p className="vs-label">Intelligence</p>
-            <p className="vs-heading text-sm font-semibold mt-1">Real-time analysis</p>
+            <p className="vs-label">{t.conversation.intelligence}</p>
+            <p className="vs-heading text-sm font-semibold mt-1">{t.conversation.analysisTitle}</p>
           </div>
           <div className="p-4 pt-2 lg:pt-0 flex flex-col gap-3 flex-1">
             <div className="lg:hidden">
-              <OnboardingTip message="Switch tabs to view live transcript or intelligence panels while you speak." />
+              <OnboardingTip
+                message={t.conversation.mobileOnboarding}
+                dismissLabel={t.common.dismissTip}
+              />
             </div>
             {analysisBootstrapping ? (
               <AnalysisPanelSkeleton />
@@ -680,6 +801,7 @@ export default function ConversationComponent({
               isSentimentUnavailable={isSentimentUnavailable}
               isVoiceSecurityUnavailable={isVoiceSecurityUnavailable}
               isIntentUnavailable={isIntentUnavailable}
+              lang={selectedLanguage}
             />
             )}
           </div>
@@ -732,11 +854,12 @@ export default function ConversationComponent({
                 style={{
                   height: `${bar.h}px`,
                   transformOrigin: 'bottom',
-                  animation: agentState
-                    ? `audioBar ${bar.dur}ms ease-in-out ${bar.d}ms infinite`
-                    : 'none',
-                  opacity: agentState === 'listening' ? 1 : agentState ? 0.55 : 0.25,
-                  transform: agentState ? undefined : 'scaleY(0.35)',
+                  animation:
+                    agentState || !sessionReady
+                      ? `audioBar ${bar.dur}ms ease-in-out ${bar.d}ms infinite`
+                      : 'none',
+                  opacity: agentState === 'listening' ? 1 : agentState || !sessionReady ? 0.55 : 0.25,
+                  transform: agentState || !sessionReady ? undefined : 'scaleY(0.35)',
                   transition: 'opacity 400ms var(--vs-ease-out)',
                 }}
               />
@@ -752,13 +875,7 @@ export default function ConversationComponent({
               key={`${centerStateText}-sub`}
               style={{ animationDelay: '60ms' }}
             >
-              {agentState === 'listening'
-                ? 'Speak naturally — Valsea adapts to your accent in real time.'
-                : agentState === 'thinking'
-                  ? 'Analyzing context before responding…'
-                  : agentState === 'speaking'
-                    ? 'Agent audio streams with sub-second latency.'
-                    : 'Establishing secure voice channel…'}
+              {centerStateSub}
             </p>
           </div>
         </div>
@@ -775,7 +892,7 @@ export default function ConversationComponent({
                   : 'text-vs-fg-dim hover:text-vs-fg-muted'
               }`}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'transcript' ? t.conversation.tabTranscript : t.conversation.tabAnalysis}
             </button>
           ))}
         </div>
@@ -783,11 +900,12 @@ export default function ConversationComponent({
         <div className={`order-2 lg:order-3 ${mobileTab === 'transcript' ? 'flex' : 'hidden'} lg:flex flex-1 lg:flex-none lg:w-[400px] xl:w-[450px] flex-col shrink-0 overflow-hidden conversation-right-panel bg-vs-overlay/20`}>
           <div className="flex items-center justify-between px-4 py-3.5 shrink-0 border-b border-vs-border">
             <div>
-              <p className="vs-label">Conversation</p>
-              <p className="vs-heading text-sm font-semibold mt-0.5">Transcript</p>
+              <p className="vs-label">{t.conversation.transcript}</p>
+              <p className="vs-heading text-sm font-semibold mt-0.5">{t.conversation.transcriptTitle}</p>
             </div>
             <span className="vs-caption tabular-nums shrink-0">
-              {messageList.length} {messageList.length === 1 ? 'turn' : 'turns'}
+              {messageList.length}{' '}
+              {messageList.length === 1 ? t.conversation.turn : t.conversation.turns}
             </span>
           </div>
 
@@ -817,7 +935,7 @@ export default function ConversationComponent({
                     <Activity className="w-4 h-4" />
                   </div>
                   <p className="text-xs text-center text-vs-fg-dim max-w-[200px] leading-relaxed">
-                    Your conversation will appear here as you speak.
+                    {t.conversation.emptyTranscript}
                   </p>
                 </div>
               )}
@@ -837,10 +955,10 @@ export default function ConversationComponent({
                     <div className={`flex items-center gap-2 ${isAgent ? '' : 'flex-row-reverse'}`}>
                       {isAgent ? (
                         <span className="vs-label px-2 py-0.5 rounded-md bg-gradient-to-r from-[#3B0B94] to-[#7A56AA] text-white shadow-vs-sm normal-case tracking-wide">
-                          Valsea
+                          {t.conversation.agent}
                         </span>
                       ) : (
-                        <span className="vs-label normal-case tracking-wide">You</span>
+                        <span className="vs-label normal-case tracking-wide">{t.conversation.you}</span>
                       )}
                       <span className="vs-caption tabular-nums">{timeStr}</span>
                     </div>
@@ -860,7 +978,7 @@ export default function ConversationComponent({
               {currentInProgressMessage && (
                 <div className="vs-msg-enter flex flex-col items-start gap-1.5">
                   <span className="vs-label px-2 py-0.5 rounded-md bg-vs-brand/80 text-white normal-case tracking-wide">
-                    Valsea
+                    {t.conversation.agent}
                   </span>
                   <div className="px-4 py-3 bg-vs-msg-agent-bg border border-vs-msg-agent-border rounded-2xl rounded-tl-md shadow-vs-sm">
                     <div className="flex gap-1 items-center h-2">
@@ -884,13 +1002,13 @@ export default function ConversationComponent({
           {connectionIssues.length > 0 && (
             <div className="p-3 flex flex-col gap-2 shrink-0 border-t border-vs-border">
               <div className="flex items-center justify-between">
-                <span className="vs-label">Agent errors</span>
+                <span className="vs-label">{t.controls.agentErrors}</span>
                 <button
                   type="button"
                   onClick={clearConnectionIssues}
                   className="vs-caption hover:text-vs-fg-muted transition-colors vs-touch"
                 >
-                  Clear
+                  {t.common.clear}
                 </button>
               </div>
               <div className="flex flex-col gap-1.5 max-h-28 overflow-y-auto vs-scroll-thin">
@@ -907,7 +1025,7 @@ export default function ConversationComponent({
               <span className="relative inline-flex rounded-full h-2 w-2 bg-vs-brand" />
             </span>
             <span className="vs-label text-vs-brand-text">
-              Enrichment active
+              {t.controls.enrichmentActive}
             </span>
           </div>
         </div>
@@ -918,7 +1036,7 @@ export default function ConversationComponent({
           <button
             onClick={handleMicToggle}
             className="flex flex-col items-center gap-1.5 transition-transform duration-200 ease-vs-out hover:scale-[1.02] active:scale-[0.98]"
-            aria-label={isEnabled ? 'Mute microphone' : 'Unmute microphone'}
+            aria-label={isEnabled ? t.conversation.muteMic : t.conversation.unmuteMic}
           >
             <div
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 ease-vs-out border shadow-vs-sm ${
@@ -932,13 +1050,13 @@ export default function ConversationComponent({
                 : <MicOff className="w-5 h-5 text-vs-brand-text" />
               }
             </div>
-            <span className="vs-label">{isEnabled ? 'Mute' : 'Unmute'}</span>
+            <span className="vs-label">{isEnabled ? t.controls.mute : t.controls.unmute}</span>
           </button>
 
           <button
             onClick={handleAgentMuteToggle}
             className="flex flex-col items-center gap-1.5 transition-transform duration-200 ease-vs-out hover:scale-[1.02] active:scale-[0.98]"
-            aria-label={isAgentMuted ? 'Unmute agent' : 'Mute agent'}
+            aria-label={isAgentMuted ? t.controls.unmuteAgent : t.controls.muteAgent}
           >
             <div
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 ease-vs-out border shadow-vs-sm ${
@@ -952,22 +1070,25 @@ export default function ConversationComponent({
                 : <Volume2 className="w-5 h-5 text-vs-ctrl-icon" />
               }
             </div>
-            <span className="vs-label">{isAgentMuted ? 'Unmute AI' : 'Mute AI'}</span>
+            <span className="vs-label">{isAgentMuted ? t.controls.unmuteAi : t.controls.muteAi}</span>
           </button>
 
           <button
             onClick={handleEndSession}
             className="flex items-center gap-2 px-5 md:px-7 py-2.5 md:py-3 rounded-full text-white font-semibold text-sm transition-all duration-200 ease-vs-out bg-red-600 hover:bg-red-500 shadow-[0_4px_14px_rgba(220,38,38,0.35)] hover:shadow-[0_6px_20px_rgba(220,38,38,0.4)] hover:scale-[1.02] active:scale-[0.98]"
-            aria-label="End conversation"
-            title="End session (Esc)"
+            aria-label={t.controls.endConversation}
+            title={`${t.conversation.endSession} (Esc)`}
           >
             <PhoneOff className="w-4 h-4" />
-            End session
+            {t.conversation.endSession}
           </button>
 
           <div className="flex flex-col items-center gap-1.5">
             <div className="w-12 h-12 rounded-full flex items-center justify-center bg-vs-ctrl-bg border border-vs-ctrl-border shadow-vs-sm">
-              <MicrophoneSelector localMicrophoneTrack={localMicrophoneTrack} />
+              <MicrophoneSelector
+                localMicrophoneTrack={localMicrophoneTrack}
+                selectLabel={t.common.selectMic}
+              />
             </div>
             <span className="vs-label">Input</span>
           </div>

@@ -13,6 +13,7 @@ import {
 
 interface MicrophoneSelectorProps {
   localMicrophoneTrack: IMicrophoneAudioTrack | null;
+  selectLabel?: string;
 }
 
 interface MicrophoneDevice {
@@ -22,6 +23,7 @@ interface MicrophoneDevice {
 
 export function MicrophoneSelector({
   localMicrophoneTrack,
+  selectLabel = 'Select microphone',
 }: MicrophoneSelectorProps) {
   const [devices, setDevices] = useState<MicrophoneDevice[]>([]);
   const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
@@ -134,7 +136,7 @@ export function MicrophoneSelector({
           variant="ghost"
           size="icon"
           className="rounded-full w-10 h-10 bg-transparent hover:bg-vs-brand-acc border-0 text-vs-ctrl-icon hover:text-vs-brand-text transition-colors duration-200"
-          title="Select microphone"
+          title={selectLabel}
         >
           <Settings className="h-4 w-4" />
         </Button>

@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: 'BPO Voice Call Demo — VALSEA',
   description:
-    'Contact-center voice call demo for BPO operations (Concentrix, TDCX, and similar). Live translation-ready agent with accent-aware ASR across Southeast Asian languages.',
+    'Contact-center voice call demo for BPO operations (Concentrix, TDCX, and similar). Live translation-ready agent with accent-aware ASR in English, Vietnamese, Indonesian, Thai, and more.',
   icons: {
     icon: '/valsea-logo.png',
     apple: '/valsea-logo.png',
