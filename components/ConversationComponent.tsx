@@ -365,11 +365,11 @@ export default function ConversationComponent({
       try { rec = new MediaRecorder(stream, { mimeType }); } catch { return; }
       currentRecorder = rec;
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-      rec.onstop = async () => {
+      rec.onstop = () => {
         if (!active || chunks.length === 0) { if (active) runCycle(); return; }
         const blob = new Blob(chunks, { type: mimeType });
-        if (blob.size >= 1000) await Promise.all([submitProsody(blob), submitVoiceSecurity(blob)]);
         if (active) runCycle();
+        if (blob.size >= 1000) void Promise.all([submitProsody(blob), submitVoiceSecurity(blob)]);
       };
       rec.start();
       setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, 8000);

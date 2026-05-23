@@ -20,6 +20,12 @@ Schema:
   "action_suggestion": string  // one-line recommended next action for the agent/CRM
 }`;
 
+const llmApiKey = process.env.NEXT_LLM_API_KEY;
+const llmUrl    = process.env.NEXT_LLM_URL;
+const openai    = llmApiKey && llmUrl
+  ? createOpenAI({ apiKey: llmApiKey, baseURL: llmUrl.replace(/\/chat\/completions\/?$/, '') })
+  : null;
+
 export async function POST(request: NextRequest) {
   try {
     const { transcript, language } = await request.json() as { transcript?: string; language?: string };
@@ -29,13 +35,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 1: Valsea annotate — semantic tags
-    const annotateForm = new URLSearchParams();
-    annotateForm.set('model', 'valsea-annotate');
-    annotateForm.set('text', transcript);
-    annotateForm.set('enable_tags', 'true');
-    annotateForm.set('enable_correction', 'false');
-    if (language) annotateForm.set('language', language);
-
     let tags: string[] = [];
     try {
       const annotateRes = await fetch('https://api.valsea.ai/v1/annotate', {
@@ -61,10 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: LLM structured intent extraction
-    const llmApiKey = process.env.NEXT_LLM_API_KEY;
-    const llmUrl = process.env.NEXT_LLM_URL;
-
-    if (!llmApiKey || !llmUrl) {
+    if (!openai) {
       // Return tag-only result when LLM is not configured
       return NextResponse.json({
         intent: tags[0] ?? 'unknown',
@@ -74,9 +70,6 @@ export async function POST(request: NextRequest) {
         tags,
       });
     }
-
-    const baseURL = llmUrl.replace(/\/chat\/completions\/?$/, '');
-    const openai = createOpenAI({ apiKey: llmApiKey, baseURL });
 
     const userContent = [
       `Transcript: "${transcript}"`,
