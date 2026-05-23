@@ -13,10 +13,7 @@ import type {
 } from "../types/conversation";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { OnboardingTip } from "./OnboardingTip";
-import {
-  SessionConnectingOverlay,
-  type ConnectStep,
-} from "./SessionConnectingOverlay";
+import { SessionConnectingOverlay } from "./SessionConnectingOverlay";
 import { useDocumentLang } from "@/hooks/useDocumentLang";
 import { useTheme } from "@/hooks/useTheme";
 import { LoadingSkeleton } from "./LoadingSkeleton";
@@ -72,23 +69,16 @@ export default function LandingPage() {
   const [agoraData, setAgoraData] = useState<AgoraTokenData | null>(null);
   const [rtmClient, setRtmClient] = useState<RTMClient | null>(null);
   const [agentJoinError, setAgentJoinError] = useState(false);
-  const [connectSteps, setConnectSteps] = useState<ConnectStep[]>([
-    { id: "token", label: "Securing voice channel", status: "pending" },
-    { id: "agent", label: "Starting AI agent", status: "pending" },
-    { id: "rtm", label: "Connecting transcript stream", status: "pending" },
-  ]);
+  const [connectSignalReady, setConnectSignalReady] = useState(false);
   const { isDark, toggle: toggleTheme } = useTheme();
 
   useDocumentLang(selectedLanguage);
 
-  const setStepStatus = (
-    id: string,
-    status: ConnectStep["status"],
-  ) => {
-    setConnectSteps((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status } : s)),
-    );
-  };
+  const handleConnectSequenceFinished = useCallback(() => {
+    setIsLoading(false);
+    setConnectSignalReady(false);
+    setShowConversation(true);
+  }, []);
 
   useEffect(() => {
     import("agora-rtc-react").catch(() => {});
@@ -176,11 +166,7 @@ export default function LandingPage() {
     setIsLoading(true);
     setError(null);
     setAgentJoinError(false);
-    setConnectSteps([
-      { id: "token", label: "Securing voice channel", status: "active" },
-      { id: "agent", label: "Starting AI agent", status: "pending" },
-      { id: "rtm", label: "Connecting transcript stream", status: "pending" },
-    ]);
+    setConnectSignalReady(false);
     try {
       const agoraResponse = await fetch("/api/generate-agora-token");
       const responseData = await agoraResponse.json();
@@ -189,10 +175,6 @@ export default function LandingPage() {
           `Failed to generate token: ${JSON.stringify(responseData)}`,
         );
       }
-      setStepStatus("token", "done");
-      setStepStatus("agent", "active");
-      setStepStatus("rtm", "active");
-
       const [agentData, rtm] = await Promise.all([
         fetch("/api/invite-agent", {
           method: "POST",
@@ -219,21 +201,14 @@ export default function LandingPage() {
         })(),
       ]);
 
-      setStepStatus("agent", "done");
-      setStepStatus("rtm", "done");
       setRtmClient(rtm);
       setAgoraData({ ...responseData, agentId: agentData.agent_id });
-      setShowConversation(true);
+      setConnectSignalReady(true);
     } catch (err) {
       setError("Failed to start conversation. Please try again.");
       console.error("Error starting conversation:", err);
-      setConnectSteps((prev) =>
-        prev.map((s) =>
-          s.status === "active" ? { ...s, status: "pending" as const } : s,
-        ),
-      );
-    } finally {
       setIsLoading(false);
+      setConnectSignalReady(false);
     }
   };
 
@@ -279,7 +254,11 @@ export default function LandingPage() {
   // ── Pre-call landing page ────────────────────────────────────────────────────
   return (
     <div className="vs-page-shell min-h-[100dvh] flex flex-col items-center justify-center relative overflow-hidden p-6 sm:p-10 px-safe bg-vs-page text-vs-fg">
-      <SessionConnectingOverlay visible={isLoading} steps={connectSteps} />
+      <SessionConnectingOverlay
+        visible={isLoading}
+        signalReady={connectSignalReady}
+        onFinished={handleConnectSequenceFinished}
+      />
       <div className="vs-mesh-bg" aria-hidden="true" />
       <div
         className="absolute inset-0 pointer-events-none"

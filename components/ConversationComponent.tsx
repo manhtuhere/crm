@@ -35,7 +35,7 @@ import {
 import { MicrophoneSelector } from './MicrophoneSelector';
 import { ConnectionStatusPanel } from './ConnectionStatusPanel';
 import { AnalysisPanelSkeleton } from './AnalysisPanelSkeleton';
-import { SessionConnectingOverlay, type ConnectStep } from './SessionConnectingOverlay';
+import { SessionConnectingOverlay } from './SessionConnectingOverlay';
 import { TranscriptMessageSkeleton } from './TranscriptMessageSkeleton';
 import { OnboardingTip } from './OnboardingTip';
 import { useDocumentLang } from '@/hooks/useDocumentLang';
@@ -126,7 +126,7 @@ export default function ConversationComponent({
   const [mobileTab, setMobileTab] = useState<'transcript' | 'analysis'>('transcript');
   const [connectionPanelOpen, setConnectionPanelOpen] = useState(false);
   const [messageTimestamps, setMessageTimestamps] = useState<Record<string, number>>({});
-  const [sessionOverlayDismissed, setSessionOverlayDismissed] = useState(false);
+  const [showCallOverlay, setShowCallOverlay] = useState(false);
   const { isDark, toggle: toggleTheme } = useTheme();
   const isMobile = useIsMobile();
   useDocumentLang(selectedLanguage);
@@ -296,33 +296,20 @@ export default function ConversationComponent({
   }, [messageList]);
 
   const sessionReady = joinSuccess && isAgentConnected;
-  const showSessionOverlay = isReady && !sessionReady && !sessionOverlayDismissed;
 
   useEffect(() => {
-    if (sessionReady) setSessionOverlayDismissed(false);
-  }, [sessionReady]);
+    if (isReady) setShowCallOverlay(true);
+  }, [isReady]);
 
   useEffect(() => {
-    if (sessionReady || !isReady) return;
-    const t = setTimeout(() => setSessionOverlayDismissed(true), 20_000);
+    if (!isReady) setShowCallOverlay(false);
+  }, [isReady]);
+
+  useEffect(() => {
+    if (!showCallOverlay || sessionReady) return;
+    const t = setTimeout(() => setShowCallOverlay(false), 25_000);
     return () => clearTimeout(t);
-  }, [sessionReady, isReady]);
-
-  const sessionConnectSteps = useMemo<ConnectStep[]>(
-    () => [
-      {
-        id: 'rtc',
-        label: 'Joining voice channel',
-        status: joinSuccess ? 'done' : isReady ? 'active' : 'pending',
-      },
-      {
-        id: 'agent',
-        label: 'Connecting AI agent',
-        status: isAgentConnected ? 'done' : joinSuccess ? 'active' : 'pending',
-      },
-    ],
-    [joinSuccess, isAgentConnected, isReady],
-  );
+  }, [showCallOverlay, sessionReady]);
 
   const connectionSeverity = useMemo<'normal' | 'warning' | 'error'>(() => {
     if (connectionState !== 'CONNECTED') return 'error';
@@ -620,9 +607,9 @@ export default function ConversationComponent({
   return (
     <div className="vs-page-shell h-[100dvh] flex flex-col overflow-hidden bg-vs-page text-vs-fg">
       <SessionConnectingOverlay
-        visible={showSessionOverlay}
-        title="Connecting to Valsea"
-        steps={sessionConnectSteps}
+        visible={showCallOverlay}
+        signalReady={sessionReady}
+        onFinished={() => setShowCallOverlay(false)}
       />
       {remoteUsers.map((user) => (
         <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>
