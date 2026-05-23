@@ -1,55 +1,74 @@
-'use client';
+"use client";
 
-import { useState, useRef, Suspense, useEffect, useCallback } from 'react';
-import dynamic from 'next/dynamic';
-import Image from 'next/image';
-import { Loader2 } from 'lucide-react';
-import type { RTMClient } from 'agora-rtm';
+import type { RTMClient } from "agora-rtm";
+import { Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
+import Image from "next/image";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type {
-  AgoraTokenData,
-  ClientStartRequest,
   AgentResponse,
   AgoraRenewalTokens,
-} from '../types/conversation';
-import { ErrorBoundary } from './ErrorBoundary';
-import { LoadingSkeleton } from './LoadingSkeleton';
+  AgoraTokenData,
+  ClientStartRequest,
+} from "../types/conversation";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { LoadingSkeleton } from "./LoadingSkeleton";
 
-const ConversationComponent = dynamic(() => import('./ConversationComponent'), {
+const ConversationComponent = dynamic(() => import("./ConversationComponent"), {
   ssr: false,
 });
 
 const AgoraProvider = dynamic(
   async () => {
-    const { AgoraRTCProvider, default: AgoraRTC } = await import('agora-rtc-react');
+    const { AgoraRTCProvider, default: AgoraRTC } =
+      await import("agora-rtc-react");
     return {
-      default: function AgoraProviders({ children }: { children: React.ReactNode }) {
-        const clientRef = useRef<ReturnType<typeof AgoraRTC.createClient> | null>(null);
+      default: function AgoraProviders({
+        children,
+      }: {
+        children: React.ReactNode;
+      }) {
+        const clientRef = useRef<ReturnType<
+          typeof AgoraRTC.createClient
+        > | null>(null);
         if (!clientRef.current) {
-          clientRef.current = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+          clientRef.current = AgoraRTC.createClient({
+            mode: "rtc",
+            codec: "vp8",
+          });
         }
-        return <AgoraRTCProvider client={clientRef.current}>{children}</AgoraRTCProvider>;
+        return (
+          <AgoraRTCProvider client={clientRef.current}>
+            {children}
+          </AgoraRTCProvider>
+        );
       },
     };
   },
   { ssr: false },
 );
 
-// Only Valsea-ASR-supported languages
+// Valsea-ASR-supported languages
 const LANGUAGE_OPTIONS = [
-  { label: 'Vietnamese (Tiếng Việt)', code: 'vi' },
-  { label: 'Indonesian (Bahasa Indonesia)', code: 'id' },
-  { label: 'Malay (Bahasa Melayu)', code: 'ms' },
-  { label: 'Thai (ภาษาไทย)', code: 'th' },
-  { label: 'Filipino (Tagalog)', code: 'tl' },
-  { label: 'Tamil (தமிழ்)', code: 'ta' },
-  { label: 'Khmer (ភាសាខ្មែរ)', code: 'km' },
+  { label: "Vietnamese (Tiếng Việt)", code: "vi" },
+  { label: "Indonesian (Bahasa Indonesia)", code: "id" },
+  { label: "Malay (Bahasa Melayu)", code: "ms" },
+  { label: "Thai (ภาษาไทย)", code: "th" },
+  { label: "Filipino (Tagalog)", code: "tl" },
+  { label: "Tamil (தமிழ்)", code: "ta" },
+  { label: "Khmer (ភាសាខ្មែរ)", code: "km" },
+  { label: "Chinese – Mandarin (普通话)", code: "zh" },
+  { label: "Chinese – Cantonese (廣東話)", code: "yue" },
+  { label: "Korean (한국어)", code: "ko" },
+  { label: "Japanese (日本語)", code: "ja" },
+  { label: "Hindi (हिन्दी)", code: "hi" },
 ] as const;
 
 const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;
 
 export default function LandingPage() {
   const [showConversation, setShowConversation] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('vi');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("vi");
   const [allowLanguageSwitching, setAllowLanguageSwitching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,20 +77,24 @@ export default function LandingPage() {
   const [agentJoinError, setAgentJoinError] = useState(false);
 
   useEffect(() => {
-    import('agora-rtc-react').catch(() => {});
-    import('agora-rtm').catch(() => {});
+    import("agora-rtc-react").catch(() => {});
+    import("agora-rtm").catch(() => {});
   }, []);
 
   const handleTokenWillExpire = useCallback(
     async (uid: string): Promise<AgoraRenewalTokens> => {
       const channel = agoraData?.channel;
-      if (!channel) throw new Error('Missing channel for token renewal');
+      if (!channel) throw new Error("Missing channel for token renewal");
       const [rtcResponse, rtmResponse] = await Promise.all([
         fetch(`/api/generate-agora-token?channel=${channel}&uid=${uid}`),
         fetch(`/api/generate-agora-token?channel=${channel}&uid=0`),
       ]);
-      const [rtcData, rtmData] = await Promise.all([rtcResponse.json(), rtmResponse.json()]);
-      if (!rtcResponse.ok || !rtmResponse.ok) throw new Error('Failed to generate renewal tokens');
+      const [rtcData, rtmData] = await Promise.all([
+        rtcResponse.json(),
+        rtmResponse.json(),
+      ]);
+      if (!rtcResponse.ok || !rtmResponse.ok)
+        throw new Error("Failed to generate renewal tokens");
       return { rtcToken: rtcData.token, rtmToken: rtmData.token };
     },
     [agoraData],
@@ -81,27 +104,30 @@ export default function LandingPage() {
     async (newLang: string) => {
       // Throw so the caller (handleLangChange) can catch and revert the optimistic update.
       if (!agoraData?.channel || !agoraData.uid) {
-        throw new Error('Missing session data for language switch');
+        throw new Error("Missing session data for language switch");
       }
       if (agoraData.agentId) {
         // Stop old agent — best-effort, never block the switch on failure.
         try {
-          await fetch('/api/stop-conversation', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+          await fetch("/api/stop-conversation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ agent_id: agoraData.agentId }),
           });
         } catch (err) {
-          console.warn('[lang-switch] stop-conversation failed (continuing):', err);
+          console.warn(
+            "[lang-switch] stop-conversation failed (continuing):",
+            err,
+          );
         }
         // client.stopAgent() signals Agora asynchronously — the agent leaves the RTC
         // channel 1–3 s after the HTTP 200. Wait before starting the replacement so
         // both agents aren't live simultaneously and the old one can't reply in the wrong language.
         await new Promise<void>((r) => setTimeout(r, 1500));
       }
-      const res = await fetch('/api/invite-agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/invite-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requester_id: agoraData.uid,
           channel_name: agoraData.channel,
@@ -109,9 +135,11 @@ export default function LandingPage() {
           allowLanguageSwitching,
         } as ClientStartRequest),
       });
-      if (!res.ok) throw new Error('Failed to restart agent with new language');
+      if (!res.ok) throw new Error("Failed to restart agent with new language");
       const data: AgentResponse = await res.json();
-      setAgoraData((prev) => (prev ? { ...prev, agentId: data.agent_id } : prev));
+      setAgoraData((prev) =>
+        prev ? { ...prev, agentId: data.agent_id } : prev,
+      );
       setSelectedLanguage(newLang);
     },
     [agoraData, allowLanguageSwitching],
@@ -123,7 +151,7 @@ export default function LandingPage() {
         <p className="text-sm text-white/50 max-w-sm">
           <code className="bg-[#7A56AA]/20 px-1.5 py-0.5 rounded text-[#B89AE3] font-mono">
             NEXT_PUBLIC_AGORA_APP_ID
-          </code>{' '}
+          </code>{" "}
           is not set. Add it to your environment and restart.
         </p>
       </div>
@@ -135,16 +163,18 @@ export default function LandingPage() {
     setError(null);
     setAgentJoinError(false);
     try {
-      const agoraResponse = await fetch('/api/generate-agora-token');
+      const agoraResponse = await fetch("/api/generate-agora-token");
       const responseData = await agoraResponse.json();
       if (!agoraResponse.ok) {
-        throw new Error(`Failed to generate token: ${JSON.stringify(responseData)}`);
+        throw new Error(
+          `Failed to generate token: ${JSON.stringify(responseData)}`,
+        );
       }
 
       const [agentData, rtm] = await Promise.all([
-        fetch('/api/invite-agent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        fetch("/api/invite-agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             requester_id: responseData.uid,
             channel_name: responseData.channel,
@@ -153,16 +183,19 @@ export default function LandingPage() {
           } as ClientStartRequest),
         })
           .then(async (res) => {
-            if (!res.ok) { setAgentJoinError(true); return null; }
+            if (!res.ok) {
+              setAgentJoinError(true);
+              return null;
+            }
             return res.json() as Promise<AgentResponse>;
           })
           .catch((err) => {
-            console.error('Failed to start agent:', err);
+            console.error("Failed to start agent:", err);
             setAgentJoinError(true);
             return null;
           }),
         (async () => {
-          const { default: AgoraRTM } = await import('agora-rtm');
+          const { default: AgoraRTM } = await import("agora-rtm");
           const rtm: RTMClient = new AgoraRTM.RTM(
             process.env.NEXT_PUBLIC_AGORA_APP_ID!,
             String(Date.now()),
@@ -177,8 +210,8 @@ export default function LandingPage() {
       setAgoraData({ ...responseData, agentId: agentData?.agent_id });
       setShowConversation(true);
     } catch (err) {
-      setError('Failed to start conversation. Please try again.');
-      console.error('Error starting conversation:', err);
+      setError("Failed to start conversation. Please try again.");
+      console.error("Error starting conversation:", err);
     } finally {
       setIsLoading(false);
     }
@@ -187,16 +220,16 @@ export default function LandingPage() {
   const handleEndConversation = async () => {
     if (agoraData?.agentId) {
       try {
-        await fetch('/api/stop-conversation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        await fetch("/api/stop-conversation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ agent_id: agoraData.agentId }),
         });
       } catch (err) {
-        console.error('Error stopping agent:', err);
+        console.error("Error stopping agent:", err);
       }
     }
-    rtmClient?.logout().catch((err) => console.error('RTM logout error:', err));
+    rtmClient?.logout().catch((err) => console.error("RTM logout error:", err));
     setRtmClient(null);
     setShowConversation(false);
   };
@@ -220,7 +253,9 @@ export default function LandingPage() {
                 onEndConversation={handleEndConversation}
                 selectedLanguage={selectedLanguage}
                 allowLanguageSwitching={allowLanguageSwitching}
-                onChangeLanguage={allowLanguageSwitching ? handleChangeLanguage : undefined}
+                onChangeLanguage={
+                  allowLanguageSwitching ? handleChangeLanguage : undefined
+                }
               />
             </AgoraProvider>
           </ErrorBoundary>
@@ -238,12 +273,11 @@ export default function LandingPage() {
         aria-hidden="true"
         style={{
           background:
-            'radial-gradient(ellipse 65% 55% at 50% 55%, rgba(59,11,148,0.28) 0%, transparent 70%)',
+            "radial-gradient(ellipse 65% 55% at 50% 55%, rgba(59,11,148,0.28) 0%, transparent 70%)",
         }}
       />
 
       <div className="z-10 flex flex-col items-center gap-10 w-full max-w-sm animate-fade-up">
-
         {/* VALSEA brand */}
         <div className="flex flex-col items-center gap-2">
           <Image
@@ -261,14 +295,15 @@ export default function LandingPage() {
 
         {/* Demo configuration card */}
         <div className="w-full flex flex-col gap-5 border border-[#7A56AA]/20 rounded-2xl bg-[#0e0b22]/70 p-6 backdrop-blur-sm">
-
           {/* Demo identity — Coke CX context */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center font-bold text-white text-sm select-none shrink-0">
               C
             </div>
             <div>
-              <p className="text-sm font-semibold leading-tight tracking-tight">Coke CX</p>
+              <p className="text-sm font-semibold leading-tight tracking-tight">
+                Coke CX
+              </p>
               <p className="text-[10px] text-white/35 tracking-[0.15em] uppercase leading-tight mt-0.5">
                 Valsea Voice Agent Demo
               </p>
@@ -291,10 +326,14 @@ export default function LandingPage() {
               onChange={(e) => setSelectedLanguage(e.target.value)}
               disabled={isLoading}
               className="w-full h-10 rounded-lg border border-[#7A56AA]/25 px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#7A56AA]/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 appearance-none"
-              style={{ backgroundColor: 'rgba(122,86,170,0.08)' }}
+              style={{ backgroundColor: "rgba(122,86,170,0.08)" }}
             >
               {LANGUAGE_OPTIONS.map((opt) => (
-                <option key={opt.code} value={opt.code} className="bg-[#120e28] text-white">
+                <option
+                  key={opt.code}
+                  value={opt.code}
+                  className="bg-[#120e28] text-white"
+                >
                   {opt.label}
                 </option>
               ))}
@@ -302,7 +341,7 @@ export default function LandingPage() {
           </div>
 
           {/* Language switching toggle */}
-          <label className="flex items-center gap-3 cursor-pointer select-none group">
+          {/* <label className="flex items-center gap-3 cursor-pointer select-none group">
             <div className="relative shrink-0">
               <input
                 type="checkbox"
@@ -329,7 +368,7 @@ export default function LandingPage() {
             <span className="text-sm text-white/50 group-hover:text-white/65 transition-colors duration-200 leading-snug">
               Allow language switching during call
             </span>
-          </label>
+          </label> */}
 
           {/* Start button — approved gradient: #3B0B94 → #7A56AA */}
           <button
@@ -338,10 +377,12 @@ export default function LandingPage() {
             className="w-full h-11 rounded-lg text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
             style={{
               background: isLoading
-                ? 'rgba(122,86,170,0.4)'
-                : 'linear-gradient(135deg, #3B0B94 0%, #7A56AA 100%)',
+                ? "rgba(122,86,170,0.4)"
+                : "linear-gradient(135deg, #3B0B94 0%, #7A56AA 100%)",
             }}
-            aria-label={isLoading ? 'Starting conversation' : 'Start conversation'}
+            aria-label={
+              isLoading ? "Starting conversation" : "Start conversation"
+            }
           >
             {isLoading ? (
               <>
@@ -349,12 +390,14 @@ export default function LandingPage() {
                 Starting…
               </>
             ) : (
-              'Start Conversation'
+              "Start Conversation"
             )}
           </button>
 
           {error && (
-            <p className="text-xs text-[#B89AE3]/70 text-center leading-relaxed">{error}</p>
+            <p className="text-xs text-[#B89AE3]/70 text-center leading-relaxed">
+              {error}
+            </p>
           )}
         </div>
 

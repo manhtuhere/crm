@@ -37,27 +37,12 @@ import {
   getConversationIssueSeverity,
   type ConnectionIssue,
 } from './ConversationErrorCard';
-import { AnalysisPanel, type ProsodyData, type SentimentData } from './AnalysisPanel';
+import { AnalysisPanel, type ProsodyData, type SentimentData, type VoiceSecurityData } from './AnalysisPanel';
+import type { IntentData } from '@/types/conversation';
 import type { ConversationComponentProps } from '@/types/conversation';
 
 const MAX_CONNECTION_ISSUES = 6;
 
-// Language display labels — only Valsea-ASR-supported languages
-const LANGUAGE_LABELS: Record<string, string> = {
-  vi: 'Vietnamese', id: 'Indonesian', ms: 'Malay',
-  th: 'Thai', tl: 'Filipino', ta: 'Tamil', km: 'Khmer',
-};
-
-// Language options for the mid-call switcher
-const VALSEA_LANGUAGES = [
-  { label: 'Vietnamese', code: 'vi' },
-  { label: 'Indonesian', code: 'id' },
-  { label: 'Malay', code: 'ms' },
-  { label: 'Thai', code: 'th' },
-  { label: 'Filipino', code: 'tl' },
-  { label: 'Tamil', code: 'ta' },
-  { label: 'Khmer', code: 'km' },
-] as const;
 
 type RtmMessageErrorPayload = {
   object: 'message.error';
@@ -112,23 +97,21 @@ export default function ConversationComponent({
   const [agentState, setAgentState]             = useState<AgentState | null>(null);
   const [connectionIssues, setConnectionIssues] = useState<ConnectionIssue[]>([]);
 
-  // Language switching state
-  const [currentLang, setCurrentLang]               = useState(selectedLanguage);
-  const [isLanguageSwitching, setIsLanguageSwitching] = useState(false);
-
-  // Sync currentLang when parent updates selectedLanguage (post-switch)
-  useEffect(() => {
-    setCurrentLang(selectedLanguage);
-  }, [selectedLanguage]);
-
   // Valsea analysis state
   const [prosody, setProsody]                             = useState<ProsodyData | null>(null);
   const [sentiment, setSentiment]                         = useState<SentimentData | null>(null);
+  const [voiceSecurity, setVoiceSecurity]                 = useState<VoiceSecurityData | null>(null);
+  const [intent, setIntent]                               = useState<IntentData | null>(null);
   const [isProsodyLoading, setIsProsodyLoading]           = useState(false);
   const [isSentimentLoading, setIsSentimentLoading]       = useState(false);
+  const [isVoiceSecurityLoading, setIsVoiceSecurityLoading] = useState(false);
+  const [isIntentLoading, setIsIntentLoading]             = useState(false);
   const [isProsodyUnavailable, setIsProsodyUnavailable]   = useState(false);
   const [isSentimentUnavailable, setIsSentimentUnavailable] = useState(false);
+  const [isVoiceSecurityUnavailable, setIsVoiceSecurityUnavailable] = useState(false);
+  const [isIntentUnavailable, setIsIntentUnavailable]     = useState(false);
   const prevUserMsgCountRef = useRef(0);
+  const prevIntentMsgCountRef = useRef(0);
 
   const msgTimestampsRef     = useRef<Map<string, number>>(new Map());
   const transcriptEndRef     = useRef<HTMLDivElement>(null);
@@ -291,6 +274,34 @@ export default function ConversationComponent({
       ? 'audio/webm;codecs=opus'
       : 'audio/webm';
 
+    // Polls a Valsea async job with exponential backoff. Returns the result data or null.
+    // The [jobId] route auto-fetches the result when completed, so we receive either:
+    //   • { status: '<non-completed>' } → still in progress, keep polling
+    //   • result payload (no status, or status === 'completed') → done
+    const pollJob = async (url: string, initialDelay = 3000): Promise<Record<string, unknown> | null> => {
+      let delay = initialDelay;
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => setTimeout(r, delay));
+        if (!active) return null;
+        const res = await fetch(url);
+        if (res.status === 429) {
+          delay = Math.min(delay * 2, 30000);
+          continue;
+        }
+        if (!res.ok) return null;
+        const data = await res.json() as Record<string, unknown>;
+        const status = data.status as string | undefined;
+        if (status === 'failed') return null;
+        // Any status other than 'completed' (queued, processing, pending, running…) means not ready
+        if (status && status !== 'completed') {
+          delay = Math.min(delay * 1.5, 15000);
+          continue;
+        }
+        return data;
+      }
+      return null;
+    };
+
     const submitProsody = async (blob: Blob) => {
       setIsProsodyLoading(true);
       try {
@@ -301,28 +312,46 @@ export default function ConversationComponent({
           if (submitRes.status === 402) setIsProsodyUnavailable(true);
           return;
         }
-        const { job_id } = await submitRes.json();
+        const { job_id } = await submitRes.json() as { job_id?: string };
         if (!job_id) return;
-        let rateRetries = 0;
-        for (let i = 0; i < 10; i++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          if (!active) return;
-          const pollRes = await fetch(`/api/valsea/prosody/${job_id}`);
-          if (pollRes.status === 429 && rateRetries++ < 3) {
-            await new Promise((r) => setTimeout(r, 6000));
-            i--;
-            continue;
-          }
-          if (!pollRes.ok) break;
-          const data = await pollRes.json();
-          const emotions: ProsodyData | null = data.emotions ?? ('frustration' in data ? data : null);
-          if (emotions) { setProsody(emotions); return; }
-          if (data.status === 'failed') break;
-        }
+        const data = await pollJob(`/api/valsea/prosody/${job_id}`);
+        if (!data) return;
+        const emotions: ProsodyData | null = (data.emotions as ProsodyData) ?? ('frustration' in data ? data as unknown as ProsodyData : null);
+        if (emotions) setProsody(emotions);
       } catch (err) {
         console.error('[Prosody]', err);
       } finally {
         if (active) setIsProsodyLoading(false);
+      }
+    };
+
+    const submitVoiceSecurity = async (blob: Blob) => {
+      // Stagger 3 s behind prosody to avoid simultaneous rate-limit hits
+      await new Promise((r) => setTimeout(r, 3000));
+      if (!active) return;
+      setIsVoiceSecurityLoading(true);
+      try {
+        const form = new FormData();
+        form.append('file', blob, 'audio.webm');
+        const submitRes = await fetch('/api/valsea/voice-security', { method: 'POST', body: form });
+        if (!submitRes.ok) {
+          if (submitRes.status === 402) setIsVoiceSecurityUnavailable(true);
+          return;
+        }
+        const { job_id } = await submitRes.json() as { job_id?: string };
+        if (!job_id) return;
+        // Start polling 3 s after prosody's initial poll to further stagger
+        const data = await pollJob(`/api/valsea/voice-security/${job_id}`, 4000);
+        if (!data || !('synthetic_probability' in data)) return;
+        setVoiceSecurity({
+          synthetic_probability: (data.synthetic_probability as number) ?? 0,
+          behavioral_risk: (data.behavioral_risk as number) ?? 0,
+          liveness_status: (data.liveness_status as VoiceSecurityData['liveness_status']) ?? 'scanning',
+        });
+      } catch (err) {
+        console.error('[VoiceSecurity]', err);
+      } finally {
+        if (active) setIsVoiceSecurityLoading(false);
       }
     };
 
@@ -336,7 +365,7 @@ export default function ConversationComponent({
       rec.onstop = async () => {
         if (!active || chunks.length === 0) { if (active) runCycle(); return; }
         const blob = new Blob(chunks, { type: mimeType });
-        if (blob.size >= 1000) await submitProsody(blob);
+        if (blob.size >= 1000) await Promise.all([submitProsody(blob), submitVoiceSecurity(blob)]);
         if (active) runCycle();
       };
       rec.start();
@@ -375,6 +404,26 @@ export default function ConversationComponent({
     }, 5000);
   }, [messageList, agentUID]);
 
+  // ─── Intent: classify each new completed user turn ───────────────────────
+  useEffect(() => {
+    const userMessages = messageList.filter((m) => String(m.uid) !== agentUID && m.text);
+    if (userMessages.length <= prevIntentMsgCountRef.current) return;
+    prevIntentMsgCountRef.current = userMessages.length;
+    const latestMsg = userMessages[userMessages.length - 1];
+    if (!latestMsg?.text) return;
+
+    setIsIntentLoading(true);
+    fetch('/api/valsea/intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript: latestMsg.text }),
+    })
+      .then((r) => { if (r.status === 402) { setIsIntentUnavailable(true); return null; } return r.ok ? r.json() : null; })
+      .then((data: IntentData | null) => { if (data?.intent) setIntent(data); })
+      .catch((err) => console.error('[Intent]', err))
+      .finally(() => setIsIntentLoading(false));
+  }, [messageList, agentUID]);
+
   usePublish([localMicrophoneTrack]);
 
   useClientEvent(client, 'user-joined', (user) => {
@@ -394,6 +443,10 @@ export default function ConversationComponent({
   void getConversationIssueSeverity;
   void isAgentConnected;
   void connectionState;
+  void selectedLanguage;
+  void allowLanguageSwitching;
+  void onChangeLanguage;
+  void AGENT_STATE_LABEL;
 
   const handleMicToggle = useCallback(async () => {
     const next = !isEnabled;
@@ -413,26 +466,6 @@ export default function ConversationComponent({
 
   useClientEvent(client, 'token-privilege-will-expire', handleTokenWillExpire);
 
-  // Language switching handler
-  const handleLangChange = useCallback(
-    async (newLang: string) => {
-      if (!onChangeLanguage || newLang === currentLang || isLanguageSwitching) return;
-      setIsLanguageSwitching(true);
-      setCurrentLang(newLang); // optimistic update
-      try {
-        await onChangeLanguage(newLang);
-      } catch (err) {
-        console.error('[lang-switch]', err);
-        setCurrentLang(selectedLanguage); // revert on failure
-      } finally {
-        setIsLanguageSwitching(false);
-      }
-    },
-    [onChangeLanguage, currentLang, isLanguageSwitching, selectedLanguage],
-  );
-
-  const stateLabel = agentState ? (AGENT_STATE_LABEL[agentState] ?? 'Ready') : 'Connecting';
-  const langLabel  = LANGUAGE_LABELS[currentLang] ?? currentLang;
 
   // Audio bar configs for center visualizer
   const AUDIO_BARS = [
@@ -478,12 +511,6 @@ export default function ConversationComponent({
         </div>
 
         <div className="flex items-center gap-2">
-          {isLanguageSwitching && (
-            <span className="flex items-center gap-1.5 text-[11px]" style={{ color: '#B89AE3' }}>
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Switching…
-            </span>
-          )}
           <div
             className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide"
             style={{
@@ -513,73 +540,20 @@ export default function ConversationComponent({
             <AnalysisPanel
               prosody={prosody}
               sentiment={sentiment}
+              voiceSecurity={voiceSecurity}
+              intent={intent}
               isProsodyLoading={isProsodyLoading}
               isSentimentLoading={isSentimentLoading}
+              isVoiceSecurityLoading={isVoiceSecurityLoading}
+              isIntentLoading={isIntentLoading}
               isProsodyUnavailable={isProsodyUnavailable}
               isSentimentUnavailable={isSentimentUnavailable}
+              isVoiceSecurityUnavailable={isVoiceSecurityUnavailable}
+              isIntentUnavailable={isIntentUnavailable}
             />
           </div>
 
-          {/* Language + Microphone selectors */}
-          {/* <div
-            className="p-4 flex flex-col gap-3 shrink-0"
-            style={{ borderTop: '1px solid rgba(122,86,170,0.12)' }}
-          >
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <span
-                  className="text-[9px] tracking-[0.18em] uppercase font-medium"
-                  style={{ color: 'rgba(255,255,255,0.28)' }}
-                >
-                  Language
-                </span>
-                {allowLanguageSwitching && onChangeLanguage ? (
-                  <select
-                    value={currentLang}
-                    onChange={(e) => handleLangChange(e.target.value)}
-                    disabled={isLanguageSwitching}
-                    className="h-9 rounded-md px-2 text-xs transition-colors duration-200 appearance-none focus:outline-none focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      backgroundColor: 'rgba(122,86,170,0.1)',
-                      border: '1px solid rgba(122,86,170,0.25)',
-                      color: 'rgba(255,255,255,0.7)',
-                      // @ts-expect-error focus-ring
-                      '--tw-ring-color': '#7A56AA',
-                    }}
-                  >
-                    {VALSEA_LANGUAGES.map((opt) => (
-                      <option key={opt.code} value={opt.code} className="bg-[#120e28]">
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div
-                    className="h-9 px-3 rounded-md flex items-center text-xs truncate"
-                    style={{
-                      backgroundColor: 'rgba(122,86,170,0.08)',
-                      border: '1px solid rgba(122,86,170,0.18)',
-                      color: 'rgba(255,255,255,0.55)',
-                    }}
-                  >
-                    {langLabel}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span
-                  className="text-[9px] tracking-[0.18em] uppercase font-medium"
-                  style={{ color: 'rgba(255,255,255,0.28)' }}
-                >
-                  Microphone
-                </span>
-                <div className="h-9 flex items-center">
-                  <MicrophoneSelector localMicrophoneTrack={localMicrophoneTrack} />
-                </div>
-              </div>
-            </div>
-          </div> */}
+          {/* Language + Microphone selectors — mid-call switching disabled */}
         </div>
 
         {/* Center: Robot mascot + visualizer + status */}
@@ -855,10 +829,7 @@ export default function ConversationComponent({
         </button>
 
         {/* Microphone selector */}
-        <button
-          className="flex flex-col items-center gap-1.5"
-          aria-label="Microphone selector"
-        >
+        <div className="flex flex-col items-center gap-1.5">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center"
             style={{
@@ -874,7 +845,7 @@ export default function ConversationComponent({
           >
             Microphone
           </span>
-        </button>
+        </div>
       </div>
     </div>
   );

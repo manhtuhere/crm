@@ -30,6 +30,14 @@ export interface AgoraRenewalTokens {
   rtmToken: string;
 }
 
+export interface IntentData {
+  intent: string;
+  confidence: number;
+  entities: { type: string; value: string }[];
+  action_suggestion: string;
+  tags: string[];
+}
+
 export interface ConversationComponentProps {
   agoraData: AgoraTokenData;
   rtmClient: RTMClient;
