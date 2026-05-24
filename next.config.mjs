@@ -18,6 +18,7 @@ const nextConfig = {
     'agora-agent-uikit',
     'agora-agent-client-toolkit',
     'agora-rtc-react',
+    'agora-rtc-sdk-ng',
   ],
   turbopack: {
     root: rootDir,

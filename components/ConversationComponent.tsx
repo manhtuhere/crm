@@ -138,7 +138,9 @@ export default function ConversationComponent({
   const prosodyInFlightRef        = useRef(false);
   const voiceSecurityInFlightRef  = useRef(false);
   const voiceSecurityDoneRef      = useRef(false);
-  const nextCycleDelayRef         = useRef(0);
+  const recorderStartRef          = useRef<(() => void) | null>(null);
+  const recorderStopRef           = useRef<(() => void) | null>(null);
+  const prevAgentStateRef         = useRef<AgentState | null>(null);
 
   const addConnectionIssue = useCallback((issue: ConnectionIssue) => {
     setConnectionIssues((prev) => {
@@ -360,7 +362,7 @@ export default function ConversationComponent({
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messageList, currentInProgressMessage]);
 
-  // ─── Prosody: continuous 8-second recording cycles ───────────────────────
+  // ─── Prosody: start/stop recorder on each user speech turn ───────────────
   useEffect(() => {
     if (!localMicrophoneTrack || !isReady || !joinSuccess) return;
     let active = true;
@@ -409,7 +411,6 @@ export default function ConversationComponent({
         const submitRes = await fetch('/api/valsea/prosody', { method: 'POST', body: form });
         if (!submitRes.ok) {
           if (submitRes.status === 402) setIsProsodyUnavailable(true);
-          if (submitRes.status === 429) nextCycleDelayRef.current = Math.max(nextCycleDelayRef.current, 15000);
           return;
         }
         const { job_id } = await submitRes.json() as { job_id?: string };
@@ -439,12 +440,10 @@ export default function ConversationComponent({
         const submitRes = await fetch('/api/valsea/voice-security', { method: 'POST', body: form });
         if (!submitRes.ok) {
           if (submitRes.status === 402) setIsVoiceSecurityUnavailable(true);
-          if (submitRes.status === 429) nextCycleDelayRef.current = Math.max(nextCycleDelayRef.current, 15000);
           return;
         }
         const { job_id } = await submitRes.json() as { job_id?: string };
         if (!job_id) return;
-        // Start polling 3 s after prosody's initial poll to further stagger
         const data = await pollJob(`/api/valsea/voice-security/${job_id}`, 6000);
         if (!data || !('synthetic_probability' in data)) return;
         voiceSecurityDoneRef.current = true;
@@ -461,42 +460,49 @@ export default function ConversationComponent({
       }
     };
 
-    const runCycle = () => {
-      if (!active) return;
-      const extraDelay = nextCycleDelayRef.current;
-      nextCycleDelayRef.current = 0;
-      const startRecording = () => {
-        if (!active) return;
-        const chunks: Blob[] = [];
-        let rec: MediaRecorder;
-        try { rec = new MediaRecorder(stream, { mimeType }); } catch { return; }
-        currentRecorder = rec;
-        rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-        rec.onstop = () => {
-          if (!active || chunks.length === 0) { if (active) runCycle(); return; }
-          const blob = new Blob(chunks, { type: mimeType });
-          if (active) runCycle();
-          if (blob.size >= 1000) void (async () => {
-            await submitProsody(blob);
-            // voice-security is a one-time liveness check — skip once we have a result
-            if (!voiceSecurityDoneRef.current) await submitVoiceSecurity(blob);
-          })();
-        };
-        rec.start();
-        setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, 15000);
+    recorderStartRef.current = () => {
+      if (!active || currentRecorder?.state === 'recording') return;
+      const chunks: Blob[] = [];
+      let rec: MediaRecorder;
+      try { rec = new MediaRecorder(stream, { mimeType }); } catch { return; }
+      currentRecorder = rec;
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      rec.onstop = () => {
+        currentRecorder = null;
+        if (!active || chunks.length === 0) return;
+        const blob = new Blob(chunks, { type: mimeType });
+        if (blob.size < 1000) return;
+        void (async () => {
+          await submitProsody(blob);
+          // voice-security is a one-time liveness check — skip once we have a result
+          if (!voiceSecurityDoneRef.current) await submitVoiceSecurity(blob);
+        })();
       };
-      if (extraDelay > 0) {
-        setTimeout(startRecording, extraDelay);
-      } else {
-        startRecording();
-      }
+      rec.start();
     };
-    runCycle();
+
+    recorderStopRef.current = () => {
+      if (currentRecorder?.state === 'recording') currentRecorder.stop();
+    };
+
     return () => {
       active = false;
+      recorderStartRef.current = null;
+      recorderStopRef.current = null;
       if (currentRecorder?.state !== 'inactive') currentRecorder?.stop();
     };
   }, [localMicrophoneTrack, isReady, joinSuccess]);
+
+  // Trigger recorder start/stop based on agent state transitions
+  useEffect(() => {
+    const prev = prevAgentStateRef.current;
+    prevAgentStateRef.current = agentState;
+    if (agentState === 'listening') {
+      recorderStartRef.current?.();
+    } else if (prev === 'listening') {
+      recorderStopRef.current?.();
+    }
+  }, [agentState]);
 
   // ─── Sentiment: debounced 5 s after last new user message ────────────────
   useEffect(() => {
