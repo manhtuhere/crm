@@ -123,6 +123,10 @@ export default function ConversationComponent({
   const [isSentimentUnavailable, setIsSentimentUnavailable] = useState(false);
   const [isVoiceSecurityUnavailable, setIsVoiceSecurityUnavailable] = useState(false);
   const [isIntentUnavailable, setIsIntentUnavailable]     = useState(false);
+  const [translationLang, setTranslationLang] = useState<'vi' | 'en' | 'zh'>('en');
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [visibleTranslations, setVisibleTranslations] = useState<Set<string>>(new Set());
+  const [translatingKeys, setTranslatingKeys] = useState<Set<string>>(new Set());
   const [mobileTab, setMobileTab] = useState<'transcript' | 'analysis'>('transcript');
   const [connectionPanelOpen, setConnectionPanelOpen] = useState(false);
   const [messageTimestamps, setMessageTimestamps] = useState<Record<string, number>>({});
@@ -565,6 +569,43 @@ export default function ConversationComponent({
 
   const clearConnectionIssues = useCallback(() => setConnectionIssues([]), []);
 
+  const TRANSLATE_LANGS = [
+    { code: 'en' as const, label: 'EN', full: 'English' },
+    { code: 'vi' as const, label: 'VI', full: 'Vietnamese' },
+    { code: 'zh' as const, label: 'ZH', full: 'Chinese' },
+  ];
+
+  const handleTranslate = useCallback(async (msgKey: string, text: string) => {
+    const cacheKey = `${msgKey}:${translationLang}`;
+    if (translations[cacheKey]) {
+      setVisibleTranslations((prev) => {
+        const next = new Set(prev);
+        if (next.has(msgKey)) next.delete(msgKey); else next.add(msgKey);
+        return next;
+      });
+      return;
+    }
+    if (translatingKeys.has(cacheKey)) return;
+    setTranslatingKeys((prev) => new Set(prev).add(cacheKey));
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, targetLanguage: translationLang }),
+      });
+      if (!res.ok) return;
+      const { translation } = await res.json() as { translation?: string };
+      if (translation) {
+        setTranslations((prev) => ({ ...prev, [cacheKey]: translation }));
+        setVisibleTranslations((prev) => new Set(prev).add(msgKey));
+      }
+    } catch (err) {
+      console.error('[Translate]', err);
+    } finally {
+      setTranslatingKeys((prev) => { const next = new Set(prev); next.delete(cacheKey); return next; });
+    }
+  }, [translationLang, translations, translatingKeys]);
+
   const handleEndSession = useCallback(() => {
     hapticTap([8, 40, 24]);
     onEndConversation();
@@ -800,14 +841,34 @@ export default function ConversationComponent({
         </div>
 
         <div className={`order-2 lg:order-3 ${mobileTab === 'transcript' ? 'flex' : 'hidden'} lg:flex flex-1 lg:flex-none lg:w-[400px] xl:w-[450px] flex-col shrink-0 overflow-hidden conversation-right-panel bg-vs-overlay/20`}>
-          <div className="flex items-center justify-between px-4 py-3.5 shrink-0 border-b border-vs-border">
-            <div>
-              <p className="vs-label">Conversation</p>
-              <p className="vs-heading text-sm font-semibold mt-0.5">Transcript</p>
+          <div className="shrink-0 border-b border-vs-border">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div>
+                <p className="vs-label">Conversation</p>
+                <p className="vs-heading text-sm font-semibold mt-0.5">Transcript</p>
+              </div>
+              <span className="vs-caption tabular-nums shrink-0">
+                {messageList.length} {messageList.length === 1 ? 'turn' : 'turns'}
+              </span>
             </div>
-            <span className="vs-caption tabular-nums shrink-0">
-              {messageList.length} {messageList.length === 1 ? 'turn' : 'turns'}
-            </span>
+            <div className="flex items-center gap-1.5 px-4 pb-2.5">
+              <span className="vs-caption text-vs-fg-dim mr-0.5">Translate:</span>
+              {TRANSLATE_LANGS.map((l) => (
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => setTranslationLang(l.code)}
+                  title={l.full}
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide transition-all duration-150 ${
+                    translationLang === l.code
+                      ? 'bg-vs-brand text-white'
+                      : 'bg-vs-surface border border-vs-border-md text-vs-fg-dim hover:text-vs-fg-muted hover:border-vs-brand/40'
+                  }`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Messages */}
@@ -872,6 +933,27 @@ export default function ConversationComponent({
                     >
                       {msg.text}
                     </div>
+                    {isAgent && msg.text && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleTranslate(msgKey, msg.text)}
+                          disabled={translatingKeys.has(`${msgKey}:${translationLang}`)}
+                          className="ml-1 vs-caption text-vs-fg-dim hover:text-vs-brand-text disabled:opacity-40 transition-colors"
+                        >
+                          {translatingKeys.has(`${msgKey}:${translationLang}`)
+                            ? 'Translating…'
+                            : visibleTranslations.has(msgKey) && translations[`${msgKey}:${translationLang}`]
+                              ? 'Hide'
+                              : 'Translate'}
+                        </button>
+                        {visibleTranslations.has(msgKey) && translations[`${msgKey}:${translationLang}`] && (
+                          <div className="max-w-[92%] px-3.5 py-2 text-xs text-vs-fg-muted bg-vs-surface/60 border border-vs-border-md rounded-xl rounded-tl-md italic">
+                            {translations[`${msgKey}:${translationLang}`]}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 );
               })}
