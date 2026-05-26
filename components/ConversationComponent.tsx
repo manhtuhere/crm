@@ -377,6 +377,13 @@ export default function ConversationComponent({
       ? 'audio/webm;codecs=opus'
       : 'audio/webm';
 
+    // DIAGNOSTIC — log mimeType support on first mount
+    console.log('[Recorder] mimeType selected:', mimeType, {
+      webmOpus: MediaRecorder.isTypeSupported('audio/webm;codecs=opus'),
+      webm: MediaRecorder.isTypeSupported('audio/webm'),
+      mp4: MediaRecorder.isTypeSupported('audio/mp4'),
+    });
+
     // Polls a Valsea async job with exponential backoff. Returns the result data or null.
     // The [jobId] route auto-fetches the result when completed, so we receive either:
     //   • { status: '<non-completed>' } → still in progress, keep polling
@@ -387,14 +394,17 @@ export default function ConversationComponent({
         await new Promise((r) => setTimeout(r, delay));
         if (!active) return null;
         const res = await fetch(url);
+        console.log(`[pollJob] attempt ${i + 1} — status ${res.status} url=${url}`);
         if (res.status === 429) {
+          console.warn('[pollJob] 429 rate-limited, backing off');
           delay = Math.min(delay * 2, 30000);
           continue;
         }
-        if (!res.ok) return null;
+        if (!res.ok) { console.error('[pollJob] non-OK response', res.status); return null; }
         const data = await res.json() as Record<string, unknown>;
+        console.log('[pollJob] body:', JSON.stringify(data));
         const status = data.status as string | undefined;
-        if (status === 'failed') return null;
+        if (status === 'failed') { console.error('[pollJob] job failed'); return null; }
         // Any status other than 'completed' (queued, processing, pending, running…) means not ready
         if (status && status !== 'completed') {
           delay = Math.min(delay * 1.5, 15000);
@@ -402,26 +412,40 @@ export default function ConversationComponent({
         }
         return data;
       }
+      console.error('[pollJob] exhausted retries');
       return null;
     };
 
     const submitProsody = async (blob: Blob) => {
-      if (prosodyInFlightRef.current) return;
+      if (prosodyInFlightRef.current) {
+        console.warn('[Prosody] skipped — request already in flight');
+        return;
+      }
       prosodyInFlightRef.current = true;
       setIsProsodyLoading(true);
       try {
         const form = new FormData();
         form.append('file', blob, 'audio.webm');
+        console.log('[Prosody] submitting blob', {
+          sizeKB: (blob.size / 1024).toFixed(1),
+          estimatedDurationS: (blob.size / 2000).toFixed(1), // rough: opus @ 16kbps = ~2KB/s
+          type: blob.type,
+          blobUrl: URL.createObjectURL(blob), // paste into browser tab to listen
+        });
         const submitRes = await fetch('/api/valsea/prosody', { method: 'POST', body: form });
+        const submitBody = await submitRes.clone().json().catch(() => ({}));
+        console.log('[Prosody] submit response', submitRes.status, submitBody);
         if (!submitRes.ok) {
           if (submitRes.status === 402) setIsProsodyUnavailable(true);
           return;
         }
-        const { job_id } = await submitRes.json() as { job_id?: string };
-        if (!job_id) return;
+        const { job_id } = submitBody as { job_id?: string };
+        if (!job_id) { console.error('[Prosody] no job_id in submit response', submitBody); return; }
         const data = await pollJob(`/api/valsea/prosody/${job_id}`);
+        console.log('[Prosody] raw poll result:', JSON.stringify(data));
         if (!data) return;
         const emotions: ProsodyData | null = (data.emotions as ProsodyData) ?? ('frustration' in data ? data as unknown as ProsodyData : null);
+        console.log('[Prosody] extracted emotions:', emotions);
         if (emotions) setProsody(emotions);
       } catch (err) {
         console.error('[Prosody]', err);
@@ -468,13 +492,29 @@ export default function ConversationComponent({
       if (!active || currentRecorder?.state === 'recording') return;
       const chunks: Blob[] = [];
       let rec: MediaRecorder;
-      try { rec = new MediaRecorder(stream, { mimeType }); } catch { return; }
+      try { rec = new MediaRecorder(stream, { mimeType }); } catch (err) {
+        console.error('[Recorder] MediaRecorder construction failed', err, { mimeType });
+        return;
+      }
       currentRecorder = rec;
+      const startedAt = Date.now();
+      console.log('[Recorder] started — track readyState:', msTrack.readyState, 'enabled:', msTrack.enabled);
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       rec.onstop = () => {
+        const durationMs = Date.now() - startedAt;
         currentRecorder = null;
-        if (!active || chunks.length === 0) return;
+        if (!active || chunks.length === 0) {
+          console.warn('[Recorder] onstop — no chunks (durationMs=%d, active=%s)', durationMs, active);
+          return;
+        }
         const blob = new Blob(chunks, { type: mimeType });
+        console.log('[Recorder] onstop', {
+          chunks: chunks.length,
+          sizeKB: (blob.size / 1024).toFixed(1),
+          durationMs,
+          belowThreshold: blob.size < 1000,
+          blobUrl: URL.createObjectURL(blob),
+        });
         if (blob.size < 1000) return;
         void (async () => {
           await submitProsody(blob);
@@ -486,6 +526,7 @@ export default function ConversationComponent({
     };
 
     recorderStopRef.current = () => {
+      console.log('[Recorder] stop called — currentRecorder state:', currentRecorder?.state);
       if (currentRecorder?.state === 'recording') currentRecorder.stop();
     };
 
@@ -501,6 +542,7 @@ export default function ConversationComponent({
   useEffect(() => {
     const prev = prevAgentStateRef.current;
     prevAgentStateRef.current = agentState;
+    console.log('[AgentState]', prev, '→', agentState);
     if (agentState === 'listening') {
       recorderStartRef.current?.();
     } else if (prev === 'listening') {
@@ -671,7 +713,7 @@ export default function ConversationComponent({
         title="Connecting to Valsea"
         steps={sessionConnectSteps}
       />
-      {remoteUsers.map((user) => (
+      {connectionState === 'CONNECTED' && remoteUsers.map((user) => (
         <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>
       ))}
 
