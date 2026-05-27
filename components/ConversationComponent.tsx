@@ -380,19 +380,24 @@ export default function ConversationComponent({
     }
     const audioExt = 'audio.' + mimeType.split('/')[1].split(';')[0];
 
-    const recordingStream = new MediaStream([msTrack]);
+    // Clone so MediaRecorder reads from an independent track. Without the clone,
+    // MediaRecorder and Agora's WebRTC encoder both consume the same source,
+    // which causes audible breakup in the outgoing stream on some platforms.
+    const recordingTrack = msTrack.clone();
+    const recordingStream = new MediaStream([recordingTrack]);
 
     // Polls a Valsea async job with exponential backoff. Returns the result data or null.
     // The [jobId] route auto-fetches the result when completed, so we receive either:
     //   • { status: '<non-completed>' } → still in progress, keep polling
     //   • result payload (no status, or status === 'completed') → done
-    const pollJob = async (url: string, initialDelay = 6000): Promise<Record<string, unknown> | null> => {
+    const pollJob = async (url: string, initialDelay = 10000): Promise<Record<string, unknown> | null> => {
+      // Each poll consumes a rate-limit token (shared 18/min budget). Start later
+      // and grow slower so most jobs resolve in 1-2 polls instead of 3-4.
       let delay = initialDelay;
       for (let i = 0; i < 8; i++) {
         await new Promise((r) => setTimeout(r, delay));
         if (!active) return null;
         const res = await fetch(url);
-        // console.log(`[pollJob] attempt ${i + 1} — status ${res.status} url=${url}`);
         if (res.status === 429) {
           console.warn('[pollJob] 429 rate-limited, backing off');
           delay = Math.min(delay * 2, 30000);
@@ -400,10 +405,8 @@ export default function ConversationComponent({
         }
         if (!res.ok) { console.error('[pollJob] non-OK response', res.status); return null; }
         const data = await res.json() as Record<string, unknown>;
-        // console.log('[pollJob] body:', JSON.stringify(data));
         const status = data.status as string | undefined;
         if (status === 'failed') { console.error('[pollJob] job failed'); return null; }
-        // Any status other than 'completed' (queued, processing, pending, running…) means not ready
         if (status && status !== 'completed') {
           delay = Math.min(delay * 1.5, 15000);
           continue;
@@ -502,7 +505,9 @@ export default function ConversationComponent({
       currentRecorder = rec;
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       rec.onstop = () => {
-        currentRecorder = null;
+        // Only clear if this recorder is still the current one — a late onstop
+        // from a previous recorder must not clobber the new one.
+        if (currentRecorder === rec) currentRecorder = null;
         if (!active || chunks.length === 0) return;
         const blob = new Blob(chunks, { type: mimeType });
         if (blob.size < 500) return;
@@ -511,7 +516,9 @@ export default function ConversationComponent({
           if (!voiceSecurityDoneRef.current) await submitVoiceSecurity(blob);
         })();
       };
-      rec.start(200);
+      // No timeslice — single ondataavailable fires on stop() with the full blob.
+      // Timeslice causes frequent encoder activity that can disrupt the audio pipeline.
+      rec.start();
     };
 
     recorderStopRef.current = () => {
@@ -524,6 +531,7 @@ export default function ConversationComponent({
       recorderStartRef.current = null;
       recorderStopRef.current = null;
       if (currentRecorder?.state !== 'inactive') currentRecorder?.stop();
+      recordingTrack.stop();
     };
   }, [localMicrophoneTrack, isReady, joinSuccess]);
 
