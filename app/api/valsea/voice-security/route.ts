@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const formData = await request.formData();
-    const audioFile = formData.get('file') as Blob | null;
+    const audioFile = formData.get('file') as File | null;
 
     if (!audioFile) {
       return NextResponse.json({ error: 'file is required' }, { status: 400 });
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     const upstreamForm = new FormData();
     upstreamForm.append('model', 'valsea-voice-security');
-    upstreamForm.append('file', audioFile, 'audio.webm');
+    upstreamForm.append('file', audioFile, audioFile.name);
     upstreamForm.append('response_format', 'verbose_json');
 
     const response = await fetch('https://api.valsea.ai/v1/voice-security', {

@@ -8,7 +8,6 @@ import {
   useRTCClient,
   useLocalMicrophoneTrack,
   useRemoteUsers,
-  useRemoteAudioTracks,
   useClientEvent,
   useJoin,
   usePublish,
@@ -96,8 +95,6 @@ export default function ConversationComponent({
   const client      = useRTCClient();
   const remoteUsers = useRemoteUsers();
   const agentUID  = process.env.NEXT_PUBLIC_AGENT_UID ?? String(DEFAULT_AGENT_UID);
-  const agentUser = remoteUsers.find((u) => u.uid.toString() === agentUID);
-  const { audioTracks: agentAudioTracks } = useRemoteAudioTracks(agentUser ? [agentUser] : []);
   const [isEnabled, setIsEnabled]               = useState(true);
   const [isAgentMuted, setIsAgentMuted]         = useState(false);
   const [isAgentConnected, setIsAgentConnected] = useState(false);
@@ -140,6 +137,7 @@ export default function ConversationComponent({
   const sentimentDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestTranscriptRef  = useRef<string>('');
   const prosodyInFlightRef        = useRef(false);
+  const pendingProsodyBlobRef     = useRef<Blob | null>(null);
   const voiceSecurityInFlightRef  = useRef(false);
   const voiceSecurityDoneRef      = useRef(false);
   const recorderStartRef          = useRef<(() => void) | null>(null);
@@ -372,17 +370,17 @@ export default function ConversationComponent({
     let active = true;
     let currentRecorder: MediaRecorder | null = null;
     const msTrack = localMicrophoneTrack.getMediaStreamTrack();
-    const stream  = new MediaStream([msTrack]);
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : 'audio/webm';
 
-    // DIAGNOSTIC — log mimeType support on first mount
-    console.log('[Recorder] mimeType selected:', mimeType, {
-      webmOpus: MediaRecorder.isTypeSupported('audio/webm;codecs=opus'),
-      webm: MediaRecorder.isTypeSupported('audio/webm'),
-      mp4: MediaRecorder.isTypeSupported('audio/mp4'),
-    });
+    // Pick the best supported MIME type (includes mp4 for Safari).
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+      .find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
+    if (!mimeType) {
+      console.error('[Recorder] No supported MIME type');
+      return;
+    }
+    const audioExt = 'audio.' + mimeType.split('/')[1].split(';')[0];
+
+    const recordingStream = new MediaStream([msTrack]);
 
     // Polls a Valsea async job with exponential backoff. Returns the result data or null.
     // The [jobId] route auto-fetches the result when completed, so we receive either:
@@ -394,7 +392,7 @@ export default function ConversationComponent({
         await new Promise((r) => setTimeout(r, delay));
         if (!active) return null;
         const res = await fetch(url);
-        console.log(`[pollJob] attempt ${i + 1} — status ${res.status} url=${url}`);
+        // console.log(`[pollJob] attempt ${i + 1} — status ${res.status} url=${url}`);
         if (res.status === 429) {
           console.warn('[pollJob] 429 rate-limited, backing off');
           delay = Math.min(delay * 2, 30000);
@@ -402,7 +400,7 @@ export default function ConversationComponent({
         }
         if (!res.ok) { console.error('[pollJob] non-OK response', res.status); return null; }
         const data = await res.json() as Record<string, unknown>;
-        console.log('[pollJob] body:', JSON.stringify(data));
+        // console.log('[pollJob] body:', JSON.stringify(data));
         const status = data.status as string | undefined;
         if (status === 'failed') { console.error('[pollJob] job failed'); return null; }
         // Any status other than 'completed' (queued, processing, pending, running…) means not ready
@@ -417,42 +415,43 @@ export default function ConversationComponent({
     };
 
     const submitProsody = async (blob: Blob) => {
-      if (prosodyInFlightRef.current) {
-        console.warn('[Prosody] skipped — request already in flight');
-        return;
-      }
-      prosodyInFlightRef.current = true;
-      setIsProsodyLoading(true);
-      try {
-        const form = new FormData();
-        form.append('file', blob, 'audio.webm');
-        console.log('[Prosody] submitting blob', {
-          sizeKB: (blob.size / 1024).toFixed(1),
-          estimatedDurationS: (blob.size / 2000).toFixed(1), // rough: opus @ 16kbps = ~2KB/s
-          type: blob.type,
-          blobUrl: URL.createObjectURL(blob), // paste into browser tab to listen
-        });
-        const submitRes = await fetch('/api/valsea/prosody', { method: 'POST', body: form });
-        const submitBody = await submitRes.clone().json().catch(() => ({}));
-        console.log('[Prosody] submit response', submitRes.status, submitBody);
-        if (!submitRes.ok) {
-          if (submitRes.status === 402) setIsProsodyUnavailable(true);
-          return;
+      // Queue the latest blob; if a job is already running it will pick it up.
+      pendingProsodyBlobRef.current = blob;
+      if (prosodyInFlightRef.current) return;
+
+      while (pendingProsodyBlobRef.current && active) {
+        const toProcess: Blob = pendingProsodyBlobRef.current as Blob;
+        pendingProsodyBlobRef.current = null;
+        prosodyInFlightRef.current = true;
+        if (active) setIsProsodyLoading(true);
+        try {
+          const form = new FormData();
+          form.append('file', toProcess, audioExt);
+          const submitRes = await fetch('/api/valsea/prosody', { method: 'POST', body: form });
+          const submitBody = await submitRes.clone().json().catch(() => ({}));
+          if (!submitRes.ok) {
+            if (submitRes.status === 402) { setIsProsodyUnavailable(true); break; }
+            if (submitRes.status === 429) {
+              // BFF cooldown active — restore blob and wait before retrying.
+              if (!pendingProsodyBlobRef.current) pendingProsodyBlobRef.current = toProcess;
+              await new Promise((r) => setTimeout(r, 15_000));
+              continue;
+            }
+            continue;
+          }
+          const { job_id } = submitBody as { job_id?: string };
+          if (!job_id) { console.error('[Prosody] no job_id', submitBody); continue; }
+          const data = await pollJob(`/api/valsea/prosody/${job_id}`);
+          if (!data) continue;
+          const emotions: ProsodyData | null = (data.emotions as ProsodyData) ?? ('frustration' in data ? data as unknown as ProsodyData : null);
+          if (emotions) setProsody(emotions);
+        } catch (err) {
+          console.error('[Prosody]', err);
+        } finally {
+          prosodyInFlightRef.current = false;
         }
-        const { job_id } = submitBody as { job_id?: string };
-        if (!job_id) { console.error('[Prosody] no job_id in submit response', submitBody); return; }
-        const data = await pollJob(`/api/valsea/prosody/${job_id}`);
-        console.log('[Prosody] raw poll result:', JSON.stringify(data));
-        if (!data) return;
-        const emotions: ProsodyData | null = (data.emotions as ProsodyData) ?? ('frustration' in data ? data as unknown as ProsodyData : null);
-        console.log('[Prosody] extracted emotions:', emotions);
-        if (emotions) setProsody(emotions);
-      } catch (err) {
-        console.error('[Prosody]', err);
-      } finally {
-        prosodyInFlightRef.current = false;
-        if (active) setIsProsodyLoading(false);
       }
+      setIsProsodyLoading(false);
     };
 
     const submitVoiceSecurity = async (blob: Blob) => {
@@ -464,7 +463,7 @@ export default function ConversationComponent({
       setIsVoiceSecurityLoading(true);
       try {
         const form = new FormData();
-        form.append('file', blob, 'audio.webm');
+        form.append('file', blob, audioExt);
         const submitRes = await fetch('/api/valsea/voice-security', { method: 'POST', body: form });
         if (!submitRes.ok) {
           if (submitRes.status === 402) setIsVoiceSecurityUnavailable(true);
@@ -490,43 +489,33 @@ export default function ConversationComponent({
 
     recorderStartRef.current = () => {
       if (!active || currentRecorder?.state === 'recording') return;
+      if (msTrack.readyState !== 'live') {
+        console.warn('[Recorder] track not live:', msTrack.readyState);
+        return;
+      }
       const chunks: Blob[] = [];
       let rec: MediaRecorder;
-      try { rec = new MediaRecorder(stream, { mimeType }); } catch (err) {
+      try { rec = new MediaRecorder(recordingStream, { mimeType }); } catch (err) {
         console.error('[Recorder] MediaRecorder construction failed', err, { mimeType });
         return;
       }
       currentRecorder = rec;
-      const startedAt = Date.now();
-      console.log('[Recorder] started — track readyState:', msTrack.readyState, 'enabled:', msTrack.enabled);
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       rec.onstop = () => {
-        const durationMs = Date.now() - startedAt;
         currentRecorder = null;
-        if (!active || chunks.length === 0) {
-          console.warn('[Recorder] onstop — no chunks (durationMs=%d, active=%s)', durationMs, active);
-          return;
-        }
+        if (!active || chunks.length === 0) return;
         const blob = new Blob(chunks, { type: mimeType });
-        console.log('[Recorder] onstop', {
-          chunks: chunks.length,
-          sizeKB: (blob.size / 1024).toFixed(1),
-          durationMs,
-          belowThreshold: blob.size < 1000,
-          blobUrl: URL.createObjectURL(blob),
-        });
-        if (blob.size < 1000) return;
+        if (blob.size < 500) return;
         void (async () => {
           await submitProsody(blob);
-          // voice-security is a one-time liveness check — skip once we have a result
           if (!voiceSecurityDoneRef.current) await submitVoiceSecurity(blob);
         })();
       };
-      rec.start();
+      rec.start(200);
     };
 
     recorderStopRef.current = () => {
-      console.log('[Recorder] stop called — currentRecorder state:', currentRecorder?.state);
+      // console.log('[Recorder] stop called — currentRecorder state:', currentRecorder?.state);
       if (currentRecorder?.state === 'recording') currentRecorder.stop();
     };
 
@@ -542,7 +531,7 @@ export default function ConversationComponent({
   useEffect(() => {
     const prev = prevAgentStateRef.current;
     prevAgentStateRef.current = agentState;
-    console.log('[AgentState]', prev, '→', agentState);
+    // console.log('[AgentState]', prev, '→', agentState);
     if (agentState === 'listening') {
       recorderStartRef.current?.();
     } else if (prev === 'listening') {
@@ -670,10 +659,8 @@ export default function ConversationComponent({
   }, [isEnabled, localMicrophoneTrack]);
 
   const handleAgentMuteToggle = useCallback(() => {
-    const next = !isAgentMuted;
-    agentAudioTracks.forEach((track) => track.setVolume(next ? 0 : 100));
-    setIsAgentMuted(next);
-  }, [isAgentMuted, agentAudioTracks]);
+    setIsAgentMuted((prev) => !prev);
+  }, []);
 
   const handleTokenWillExpire = useCallback(async () => {
     if (!onTokenWillExpire || !joinedUID) return;
@@ -714,7 +701,14 @@ export default function ConversationComponent({
         steps={sessionConnectSteps}
       />
       {connectionState === 'CONNECTED' && remoteUsers.map((user) => (
-        <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>
+        <div key={user.uid} className="hidden">
+          <RemoteUser
+            user={user}
+            playAudio
+            playVideo={false}
+            volume={user.uid.toString() === agentUID && isAgentMuted ? 0 : 100}
+          />
+        </div>
       ))}
 
       <header className="relative z-20 flex items-center justify-between px-4 md:px-6 py-3 pt-safe shrink-0 border-b border-vs-border-hdr bg-vs-card/60 backdrop-blur-xl overflow-visible">

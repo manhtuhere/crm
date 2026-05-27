@@ -1,44 +1,33 @@
 // Server-side in-memory rate limiter for all Valsea upstream calls.
-// Shared across all route handlers in the same process.
+// Valsea allows 20 req/min — we cap at 18 to leave headroom for clock skew
+// and any out-of-band calls. Sliding window auto-clears, so dev-mode page
+// reloads don't inherit stale cooldowns.
 
-// Global: minimum ms between any two Valsea upstream requests.
-const GLOBAL_GAP_MS = 2500;
-let lastGlobalMs = 0;
+const BUDGET_PER_MIN = 18;
+const WINDOW_MS = 60_000;
+const upstreamCalls: number[] = [];
 
-// Per-endpoint submission cooldowns (ms).
-const submissionCooldownMs: Record<string, number> = {
-  prosody:        14000,
-  'voice-security': 22000,
-  sentiment:       8000,
-};
-const lastSubmissionMs: Record<string, number> = {};
-
-// Per-job poll rate limit: same jobId can only hit Valsea once per N ms.
-const POLL_GAP_MS = 7000;
-const lastPollMs: Record<string, number> = {};
+function tryTakeToken(): boolean {
+  const now = Date.now();
+  while (upstreamCalls.length && upstreamCalls[0] <= now - WINDOW_MS) {
+    upstreamCalls.shift();
+  }
+  if (upstreamCalls.length >= BUDGET_PER_MIN) return false;
+  upstreamCalls.push(now);
+  return true;
+}
 
 // Completed job result cache — once resolved, never re-fetch.
 const resultCache: Record<string, unknown> = {};
 
 /** Call before submitting a new job. Returns false → respond 429 immediately. */
-export function checkSubmitCooldown(endpoint: string): boolean {
-  const now = Date.now();
-  if (now - lastGlobalMs < GLOBAL_GAP_MS) return false;
-  const cool = submissionCooldownMs[endpoint] ?? 10000;
-  if (now - (lastSubmissionMs[endpoint] ?? 0) < cool) return false;
-  lastGlobalMs = now;
-  lastSubmissionMs[endpoint] = now;
-  return true;
+export function checkSubmitCooldown(_endpoint: string): boolean {
+  return tryTakeToken();
 }
 
 /** Call before polling a job. Returns false → respond 429 immediately. */
-export function checkPollCooldown(jobId: string): boolean {
-  const now = Date.now();
-  if (now - lastGlobalMs < GLOBAL_GAP_MS) return false;
-  if (now - (lastPollMs[jobId] ?? 0) < POLL_GAP_MS) return false;
-  lastGlobalMs = now;
-  lastPollMs[jobId] = now;
-  return true;
+export function checkPollCooldown(_jobId: string): boolean {
+  return tryTakeToken();
 }
 
 /** Returns cached result for a completed job, or null if not cached yet. */
